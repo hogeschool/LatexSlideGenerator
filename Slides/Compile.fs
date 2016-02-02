@@ -28,5 +28,4 @@
         do System.IO.File.Delete tex
 
 //  //do batchProcess StateTraceSamples.slides "stateTraces" "The INFDEV team" "State traces test" true false
-//  do batchProcess FunctionalWeek1.slides "fp_week1" "The INFDEV team" "Test" true false
 //  //do batchProcess Working_together_as_teachers.slides "studiedag_working_together_as_teachers" "Dr. G. Maggiore" "Working together as teachers" true true
