@@ -185,7 +185,7 @@ type Code =
       | StaticMethodCall("Console","WriteLine",args) ->
         StaticMethodCall("System.out","println",args).AsJava pre
       | StaticMethodCall("Console","ReadLine",args) ->
-        StaticMethodCall("new Scanner(System.in)","nextLine()",args).AsJava pre
+        StaticMethodCall("new Scanner(System.in)","nextLine",args).AsJava pre
       | StaticMethodCall(c,m,args) ->
         let argss = args |> List.map (fun a -> (a.AsJava "").TrimEnd([|'\n'|]) + ",")
         sprintf "%s%s.%s(%s)\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
