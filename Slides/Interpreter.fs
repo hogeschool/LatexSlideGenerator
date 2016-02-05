@@ -153,6 +153,14 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
       let! aVal = interpret a
       let! bVal = interpret b
       match aVal,bVal with
+      | IntType, IntType ->
+        return IntType
+      | FloatType, FloatType ->
+        return FloatType
+      | IntType, FloatType ->
+        return FloatType
+      | FloatType, IntType ->
+        return FloatType
       | ConstInt x, ConstInt y -> 
         match op with
         | Times -> return ConstInt(x * y)

@@ -2,7 +2,6 @@
 
 open CommonLatex
 
-
 let printBindings toString isHidden (b:Map<string,'code>) =
   let pc = b |> Map.tryFind "PC"
   let ret = b |> Map.tryFind "ret"

@@ -17,10 +17,14 @@ type CoroutineBuilder() =
   member this.Zero() = ret ()
   member this.Bind(p,k) = p >>= k
   member this.Combine(p,k) = p >>= (fun () -> k)
+//  member x.Delay(f) = f
+//  member x.Run(f) = f()
 let co = CoroutineBuilder()
 
 let getState : Coroutine<'s,'s> = fun s -> Done(s,s)
 let setState s' : Coroutine<'s,Unit> = fun s -> Done(s',())
+let changeState f : Coroutine<'s,Unit> = fun s -> Done(f s,())
+
 let rec mapCo f l = 
   co{
     match l with

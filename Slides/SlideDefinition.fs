@@ -4,6 +4,7 @@ open CodeDefinitionLambda
 open Coroutine
 open CommonLatex
 open Runtime
+open TypeChecker
 open Interpreter
 
 type SlideElement = 
@@ -28,6 +29,7 @@ type SlideElement =
   | VerticalStack of List<SlideElement>
   | PythonStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpStateTrace of TextSize * Code * RuntimeState<Code>
+  | CSharpTypeTrace of TextSize * Code * TypeCheckingState<Code>
   | LambdaStateTrace of TextSize * Term * Option<int>
   with
     member this.ToStringAsElement() = 
@@ -80,9 +82,7 @@ type SlideElement =
         sprintf @"\SlideSubSection{%s}%s" t "\n"
       | Advanced se ->
         //TODO: \footnote{Warning: this material is to be considered advanced!}
-        let content,rest = se.ToStringAsElement()
-        sprintf @"%s 
-                  %s%s" beginFrame content endFrame
+        se.ToString()
       | Block t ->
         let content,rest = t.ToStringAsElement()
         sprintf @"%s%s%s%s%s" beginFrame beginBlock content endBlock endFrame
@@ -129,8 +129,21 @@ type SlideElement =
             let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s Stack: %s\\%s%s%s%s" beginFrame textSize (beginCode "Python") ps endCode textSize stack heap input output endFrame
             yield slide ]
         stackTraceTables |> List.fold (+) ""
+      | CSharpTypeTrace(ts,p,st) ->
+        let textSize = ts.ToString()
+        let stackTraces = st :: runToEnd (typeCheckCSharp p) st
+        let ps = (p.AsCSharp "").TrimEnd([|'\n'|])
+        let stackTraceTables = 
+          [ for st in stackTraces do 
+            let declarations,classes = st.AsSlideContent Dots (function Hidden _ -> true | _ -> false) ConstInt (fun (c:Code) -> c.AsCSharp)
+            let declarations = if declarations = "" then "" else "Declarations: " + declarations
+            let classes = if classes = "" then "" else "Classes: " + classes
+            let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s %s\\%s%s" beginFrame textSize (beginCode "[Sharp]C") ps endCode textSize declarations classes endFrame
+            yield slide ]
+        stackTraceTables |> List.fold (+) ""
       | CSharpStateTrace(ts,p,st) ->
         let textSize = ts.ToString()
+        let heapLabel,stackLabel = "Heap: ","Stack: "
         let stackTraces = st :: runToEnd (runCSharp p) st
         let ps = (p.AsCSharp "").TrimEnd([|'\n'|])
         let stackTraceTables = 
@@ -138,8 +151,8 @@ type SlideElement =
             let stack,heap,input,output = st.AsSlideContent Dots (function Hidden _ -> true | _ -> false) (fun c -> c.AsCSharp)
             let input = if input = "" then "" else "Input: " + input + @"\\"
             let output = if output = "" then "" else "Output: " + output + @"\\"
-            let heap = if heap = "" then "" else "Heap: " + heap + @"\\"
-            let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s Stack: %s\\%s%s%s%s" beginFrame textSize (beginCode "Python") ps endCode textSize stack heap input output endFrame
+            let heap = if heap = "" then "" else heapLabel + heap + @"\\"
+            let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s %s%s\\%s%s%s%s" beginFrame textSize (beginCode "[Sharp]C") ps endCode textSize stackLabel stack heap input output endFrame
             yield slide ]
         stackTraceTables |> List.fold (+) ""
       | LambdaStateTrace(ts,term,maxSteps) ->
