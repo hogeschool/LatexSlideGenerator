@@ -75,7 +75,7 @@ type Code =
       | ConstBool b -> b.ToString()
       | ConstInt i -> i.ToString()
       | ConstFloat f -> f.ToString()
-      | ConstString s -> sprintf @"``%s''" s
+      | ConstString s -> sprintf "\"%s\"" s
       | Ref s -> sprintf "ref %s" s
       | Assign (v,c) -> sprintf "%s%s = %s\n" pre v ((c.AsPython "").TrimEnd([|'\n'|]))
       | ConstLambda (pc,args,body) ->
