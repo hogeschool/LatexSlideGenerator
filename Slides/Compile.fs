@@ -3,7 +3,10 @@
   let batchProcess source name author title openPDF compileTwice =
       let pdf = name + ".pdf"
       let tex = name + ".tex"
-      do System.IO.File.Delete pdf
+      try
+        do System.IO.File.Delete pdf
+      with
+      | e -> printfn "File delete complaint: %A" e
       do System.IO.File.WriteAllText(tex, source |> SlideDefinition.generateLatexFile author title)
       for i = 0 to (if compileTwice then 1 else 0) do
   //      let p = System.Diagnostics.ProcessStartInfo("pdflatex.exe", "-synctex=1 -interaction=nonstopmode " + tex)
