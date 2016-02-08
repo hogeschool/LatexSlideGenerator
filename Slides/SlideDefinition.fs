@@ -199,6 +199,7 @@ let rec generateLatexFile author title (slides:List<SlideElement>) =
 \usepackage[space]{grffile}
 \usepackage{soul,xcolor}
 \usepackage{listings}
+\usepackage{tabularx}
 \lstset{language=C,
 basicstyle=\ttfamily\footnotesize,
 escapeinside={(*@}{@*)},

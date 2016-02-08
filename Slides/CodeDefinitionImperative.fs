@@ -75,7 +75,7 @@ type Code =
       | ConstBool b -> b.ToString()
       | ConstInt i -> i.ToString()
       | ConstFloat f -> f.ToString()
-      | ConstString s -> sprintf "\"%s\"" s
+      | ConstString s -> sprintf @"``%s''" s
       | Ref s -> sprintf "ref %s" s
       | Assign (v,c) -> sprintf "%s%s = %s\n" pre v ((c.AsPython "").TrimEnd([|'\n'|]))
       | ConstLambda (pc,args,body) ->
@@ -224,8 +224,8 @@ type Code =
       | ToString p ->
         (sprintf "%s%s.ToString()" pre (p.AsCSharp ""))
       | Object bs ->
-        let argss = bs |> Map.remove "__type" |> Seq.map (fun a -> a.Key + "=" + (a.Value.AsCSharp "") + @"\\") |> Seq.toList
-        sprintf "%s%s" pre ((!+argss).TrimEnd[|','; ' '; '\\'|])
+        let argss = bs |> Map.remove "__type" |> Seq.map (fun a -> a.Key + @"=" + (a.Value.AsCSharp "") + @" \\") |> Seq.toList
+        sprintf @"%s\begin{tabular}{c} %s \end{tabular}" pre ((!+argss).TrimEnd[|','; ' '; '\\'|])
       | MainCall -> ""
       | End -> ""
       | None -> "null"

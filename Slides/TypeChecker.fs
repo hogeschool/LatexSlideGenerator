@@ -7,11 +7,17 @@ open CommonLatex
 
 let typeFromName t =
   match t with
+  | "void" -> VoidType
+  | "bool" -> BoolType
   | "int" -> IntType
   | "float" -> FloatType
   | "string" -> StringType
   | _ -> ClassType t
 
+let makeArrowType c m args t =
+  let retT = if t = "" then ClassType c else typeFromName t
+  let res = ArrowType(args |> List.map fst |> List.map typeFromName, retT)
+  res
 
 type TypeCheckingState<'code> = { Variables : List<Map<string, 'code>>; PC : int; Classes : Map<string, 'code>; Errors : List<string> }
   with 
@@ -198,9 +204,23 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
           return BoolType
         | _ -> 
           return failwithf "Cannot perform %s %s %s" (toString a) op.AsPython (toString b)
+    | InterfaceDef (n,ms) as intf ->
+      let! pc = getPC
+      let msValsByName = 
+        [
+          for m in ms do
+            match m with
+            | TypedSig(f,args,t) -> 
+              yield f,ArrowType(args |> List.map fst |> List.map typeFromName, typeFromName t)
+            | _ -> ()
+        ] |> Map.ofList
+      do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object(msValsByName)))) })
+      let nl = intf |> numberOfLines
+      do! changePC ((+) (nl - 1))
+      return None
+    | Implementation i -> return None
     | ClassDef (n,ms) as cls ->
       let! pc = getPC
-      let! s = getState
       let allMethods = ms |> List.filter (function Implementation _ -> false | _ -> true)
       let allMethodsWithThis =
          allMethods |> List.map (fun f -> match f with 
@@ -211,7 +231,14 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
                       |> List.map (fun f -> match f with 
                                             | TypedDecl(n,t,_) | Public(TypedDecl(n,t,_)) | Private(TypedDecl(n,t,_)) -> n,typeFromName t
                                             | _ -> failwith "Malformed field declaration")
-      do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object(fields |> Map.ofList)))) })
+      let allMethodsUnchecked =
+         allMethodsWithThis |> List.filter (function TypedDef(_) | Private(TypedDef(_)) | Public(TypedDef(_)) -> true | _ -> false) 
+                            |> List.map (fun f -> match f with 
+                                                  | TypedDef(m,args,t,b) | Public(TypedDef(m,args,t,b)) | Private(TypedDef(m,args,t,b)) -> 
+                                                    m,makeArrowType n m args t
+                                                  | _ -> failwith "Malformed method declaration")
+      do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object((fields @ allMethodsUnchecked) |> Map.ofList)))) })
+      let! s = getState
       do! incrPC
       let rec typeCheckMethods ms = 
         co{
@@ -269,6 +296,13 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
           else
             ret()
       return res
+    | New(c,argExprs) ->
+      let! s = getState
+      match s.Classes.[c] with
+      | Hidden(Object(ms))
+      | Object(ms) as o ->
+        return ClassType c
+      | _ -> return failwithf "Cannot find class %s" c
     | Return e ->
       let! res = typeCheck e
       do! changeState 
@@ -307,6 +341,35 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
       match iType with
       | StringType -> return IntType
       | _ -> return failwithf "Wrong argument type %s for int.parse" (iType.AsCSharp "")
+    | MethodCall(v,m,argExprs) ->
+      let! argTypes = argExprs |> mapCo typeCheck
+      let! s = getState
+      match lookup s v with
+      | ClassType c ->
+        match s.Classes.[c] with
+        | Hidden(Object(ms))
+        | Object(ms) ->
+          match ms.[m] with
+          | ArrowType(argTypesExpected, retT) ->
+            let localFrame = 
+              [
+                yield "ret", None
+                yield "this", ClassType c
+                for a,i in Seq.zip argTypes [1..argTypes.Length] do
+                yield "$arg_" + string(i) + "$", a
+              ] |> Map.ofList
+            do! changeState (fun s -> { s with Variables = localFrame :: s.Variables })
+            if argTypes = argTypesExpected.Tail then
+              do! pause
+              do! changeState (fun s -> { s with Variables = (localFrame |> Map.add "ret" retT) :: s.Variables.Tail })
+              do! pause
+              do! changeState (fun s -> { s with Variables = s.Variables.Tail })
+              return retT
+            else
+              return failwithf "Incompatible types %A and %A" argTypes argTypesExpected
+          | _ -> return failwith ""
+        | _ -> return failwith ""
+      | _ -> return failwith ""
     | End -> return None
 //    | Call(f,argExprs) ->
 //      let! argVals = argExprs |> mapCo interpret
@@ -340,26 +403,6 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
 //        do! changePC ((+) ((body_nl) + 1))
 //        return None
 //      | _ -> return failwith "Malformed if"
-//    | Implementation i -> return None
-//    | InterfaceDef (n,ms) as intf ->
-//      let! pc = getPC
-//      let! s = getState
-//      let mutable m_pc = pc + 1
-//      let msValsByName = 
-//        [
-//          for m in ms do
-//            match m with
-//            | TypedSig(f,args,t) -> 
-//              let pc = m_pc + 1
-//              m_pc <- m_pc + 1
-//              yield f,TypedSig(f,args,t)
-//            | _ -> 
-//              m_pc <- m_pc + 1
-//        ] |> Map.ofList
-//      do! setState { s with Heap = (s.Heap |> Map.add n (Hidden(Object(msValsByName |> Map.add "__name" (ConstString n))))) }
-//      let nl = intf |> numberOfLines
-//      do! changePC ((+) (nl - 1))
-//      return None
 //    | MainCall ->
 //      return! typeCheck (StaticMethodCall("Program","Main",[None]))
 //    | StaticMethodCall(c,m,argExprs) ->
@@ -387,41 +430,6 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
 //            return res
 //        | _ -> return failwithf "Cannot call method %s on %s as it is not an object" m c
 //      | _ -> return failwithf "Cannot find class %s" c
-//    | MethodCall(v,m,argExprs) ->
-//      let! s = getState
-//      match lookup s v with
-//      | Ref v_ref as v_val ->
-//        match s.Heap.[v_ref] with
-//        | Hidden(Object(bs))
-//        | Object(bs) as o ->
-//          match bs.["__type"] with
-//          | Ref(c_name) ->
-//            match s.Heap.[c_name] with
-//            | Hidden(Object(ms)) | Object(ms) ->
-//              match ms.["__name"] with
-//              | ConstString v_type_name ->
-//                return! interpret (StaticMethodCall(v_type_name, m, v_val :: argExprs))
-//              | _ -> return failwith ""
-//            | _ -> return failwith ""
-//          | _ -> return failwith ""
-//        | _ -> return failwith ""
-//      | _ -> return failwith ""
-//    | New(c,argExprs) ->
-//      let! s = getState
-//      match s.Heap.[c] with
-//      | Hidden(Object(ms))
-//      | Object(ms) as o ->
-//        let fields = ms |> Seq.filter (fun x -> match x.Value with | ConstLambda(_) | Hidden(ConstLambda(_)) -> false | _ -> x.Key.StartsWith("__") |> not) 
-//                        |> Seq.map (fun x -> x.Key,Hidden(None)) |> Map.ofSeq
-//        let self = Object (fields |> Map.add "__type" (Ref c))
-//        let self_ref_id = s.HeapSize.ToString()
-//        let self_ref = Ref self_ref_id
-//        do! setState { s with Stack = s.Stack; Heap = s.Heap |> Map.add self_ref_id self; HeapSize = s.HeapSize + 1 }
-//        do! pause
-//        let! bodyRes = interpret (StaticMethodCall(c, consName c, self_ref :: argExprs))
-//        return self_ref
-//      | _ -> return failwithf "Cannot find class %s" c
-
     | c -> return failwithf "Unsupported construct %A" c
   }
 

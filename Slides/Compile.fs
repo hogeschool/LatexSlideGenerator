@@ -25,7 +25,7 @@
           do (System.Diagnostics.Process.Start(final_pdf)).WaitForExit()
         with
         | e -> printfn "Open PDF complaint: %A" e
-        do System.IO.File.Delete tex
+        //do System.IO.File.Delete tex
 
 //  //do batchProcess StateTraceSamples.slides "stateTraces" "The INFDEV team" "State traces test" true false
 //  //do batchProcess Working_together_as_teachers.slides "studiedag_working_together_as_teachers" "Dr. G. Maggiore" "Working together as teachers" true true
