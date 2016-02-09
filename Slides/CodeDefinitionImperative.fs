@@ -42,6 +42,9 @@ type Code =
   | ConstInt of int
   | ConstFloat of float
   | ConstString of string
+  | IntType | FloatType | StringType | BoolType | VoidType
+  | ClassType of string
+  | ArrowType of List<Code> * Code
   | Assign of string * Code
   | TypedDef of string * List<string * string> * string * Code
   | TypedSig of string * List<string * string> * string
@@ -185,7 +188,7 @@ type Code =
       | StaticMethodCall("Console","WriteLine",args) ->
         StaticMethodCall("System.out","println",args).AsJava pre
       | StaticMethodCall("Console","ReadLine",args) ->
-        StaticMethodCall("new Scanner(System.in)","nextLine()",args).AsJava pre
+        StaticMethodCall("new Scanner(System.in)","nextLine",args).AsJava pre
       | StaticMethodCall(c,m,args) ->
         let argss = args |> List.map (fun a -> (a.AsJava "").TrimEnd([|'\n'|]) + ",")
         sprintf "%s%s.%s(%s)\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
@@ -206,6 +209,12 @@ type Code =
 
     member this.AsCSharp pre = 
       match this with
+      | ClassType c -> sprintf "%s%s" pre c
+      | VoidType -> sprintf "%svoid" pre
+      | BoolType -> sprintf "%sbool" pre
+      | IntType -> sprintf "%sint" pre
+      | FloatType -> sprintf "%sfloat" pre
+      | StringType -> sprintf "%sstring" pre
       | Private p ->
         (sprintf "%sprivate%s" pre (p.AsCSharp pre)).Replace("private" + pre, "private ")
       | Static p ->
@@ -215,8 +224,8 @@ type Code =
       | ToString p ->
         (sprintf "%s%s.ToString()" pre (p.AsCSharp ""))
       | Object bs ->
-        let argss = bs |> Map.remove "__type" |> Seq.map (fun a -> a.Key + "=" + (a.Value.AsCSharp "") + ", ") |> Seq.toList
-        sprintf "%s%s" pre ((!+argss).TrimEnd[|','; ' '|])
+        let argss = bs |> Map.remove "__type" |> Seq.map (fun a -> a.Key + @"=" + (a.Value.AsCSharp "") + @" \\") |> Seq.toList
+        sprintf @"%s\begin{tabular}{c} %s \end{tabular}" pre ((!+argss).TrimEnd[|','; ' '; '\\'|])
       | MainCall -> ""
       | End -> ""
       | None -> "null"
@@ -285,6 +294,14 @@ type Code =
       | Sequence (p,q) ->
         sprintf "%s%s" (p.AsCSharp pre) (q.AsCSharp pre)
       | Hidden(_) -> ""
+      | ArrowType([],ret) ->
+        sprintf @"%s() $\rightarrow$ %s" pre (ret.AsCSharp "")
+      | ArrowType(args,ret) ->
+        if args.Length = 1 then
+          sprintf @"%s%s $\rightarrow$ %s" pre (args.Head.AsCSharp "") (ret.AsCSharp "")
+        else
+          let argNames = args |> List.map (fun arg -> arg.AsCSharp "") |> List.reduce (fun a b -> a + @"$\times$" + b)
+          sprintf @"%s(%s) $\rightarrow$ %s" pre argNames (ret.AsCSharp "")
       | s -> failwithf "Unsupported C# statement %A" s
     member this.NumberOfCSharpLines = 
       let code = ((this.AsCSharp ""):string).TrimEnd([|'\n'|])
