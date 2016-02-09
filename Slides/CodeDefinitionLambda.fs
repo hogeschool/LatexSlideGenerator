@@ -16,6 +16,7 @@ type Term =
   | Or
   | Plus
   | Mult
+  | If
   | Highlighted of Term
   with
     member this.ToLambdaInner =
@@ -25,7 +26,7 @@ type Term =
     member this.ToLambda =
       match this with
       | Var s -> s
-      | Highlighted t -> sprintf @"(*@\textul{%s}@*)" (t.ToLambda)
+      | Highlighted t -> sprintf @"(*@\underline{%s}@*)" t.ToLambda//@"(*@\textul{%s}@*)" (t.ToLambda)
       | Application(Application(And,t),u) -> sprintf "(%s $\wedge$ %s)" (t.ToLambda) (u.ToLambda)
       | Application(Application(Or,t),u) -> sprintf "(%s $\wedge$ %s)" (t.ToLambda) (u.ToLambda)
       | Application(t,u) -> sprintf "(%s %s)" (t.ToLambda) (u.ToLambda)
@@ -37,6 +38,7 @@ type Term =
       | Or -> sprintf "$\vee$"
       | Plus -> sprintf "+"
       | Mult -> sprintf "$\times$"
+      | If -> sprintf "IF-THEN-ELSE"
     member this.ToString =
       match this with
       | Var s -> s
@@ -52,6 +54,7 @@ type Term =
       | Not -> sprintf "!"
       | Plus -> sprintf "+"
       | Mult -> sprintf "*"
+      | If -> sprintf "if"
 
 let (!!) x = Var x
 let (>>>) t u = Application(t,u)
@@ -66,6 +69,7 @@ let defaultTerms : Map<Term, Term> =
     Or, ("p" ==> ("q" ==> (!!"p" >>> !!"p" >>> !!"q")))
     Plus, ("m" ==> ("n" ==> ("s" ==> ("z" ==> ((!!"m" >>> !!"s") >>> ((!!"n" >>> !!"s") >>> !!"z"))))))
     Mult, ("m" ==> ("n" ==> ("s" ==> (!!"m" >>> (!!"n" >>> !!"s")))))
+    If, ("p" ==> ("a" ==> ("b" ==> (!!"p" >>> !!"a" >>> !!"b"))))
   ] |> Map.ofList
 
 let deltaRules (t:Term) : Option<Term> =
@@ -129,6 +133,7 @@ let rec reduce maxSteps p : Coroutine<(Term -> Term) * Term, bool> =
         | t -> 
           match deltaRules t with
           | Some t' ->
+            printfn "%s" t.ToString
             do! setState (k, Highlighted(t))
             do! p
             do! setState (k, t')
