@@ -17,6 +17,7 @@ type Term =
   | Plus
   | Mult
   | If
+  | Let of string * Term * Term
   | Highlighted of Term
   with
     member this.ToLambdaInner =
@@ -39,6 +40,7 @@ type Term =
       | Plus -> sprintf "+"
       | Mult -> sprintf "$\times$"
       | If -> sprintf "IF-THEN-ELSE"
+      | Let(_bind,_expr,_in) -> sprintf "LET %s = %s in %s" _bind _expr.ToLambda _in.ToLambda
     member this.ToString =
       match this with
       | Var s -> s
@@ -55,6 +57,7 @@ type Term =
       | Plus -> sprintf "+"
       | Mult -> sprintf "*"
       | If -> sprintf "if"
+      | Let(_bind,_expr,_in) -> sprintf "let %s = %s in %s" _bind _expr.ToString _in.ToString
 
 let (!!) x = Var x
 let (>>>) t u = Application(t,u)
@@ -87,6 +90,8 @@ let deltaRules (t:Term) : Option<Term> =
         Some t
       else
         Option.None
+    | Let(_bind,_expr,_in) ->
+        Some ((_bind ==> _in) >>> _expr)
     | _ -> 
       Option.None
 
