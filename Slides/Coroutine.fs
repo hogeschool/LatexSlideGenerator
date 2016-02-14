@@ -9,6 +9,7 @@ let rec (>>=) (p : Coroutine<'s,'a>) (k : 'a -> Coroutine<'s,'b>) : Coroutine<'s
     match p s0 with
     | Done(s1,x) -> k x s1
     | Pause(s1,p') -> Pause(s1,p' >>= k)
+let rec (>>) (p : Coroutine<'s,'a>) (k : Coroutine<'s,'b>) : Coroutine<'s,'b> = p >>= (fun _ -> k)
 let pause : Coroutine<'s,Unit> = fun s -> Pause(s,ret())
 
 type CoroutineBuilder() =

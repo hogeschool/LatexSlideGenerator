@@ -226,6 +226,8 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
          allMethods |> List.map (fun f -> match f with 
                                           | TypedDef(m,args,t,b) | Public(TypedDef(m,args,t,b)) | Private(TypedDef(m,args,t,b)) -> 
                                             TypedDef(m,(n,"this") :: args,t,b)
+                                          | Static(TypedDef(m,args,t,b)) | Static(Public(TypedDef(m,args,t,b))) | Static(Private(TypedDef(m,args,t,b))) -> 
+                                            TypedDef(m,args,t,b)
                                           | _ -> f)
       let fields = ms |> List.filter (function TypedDecl(_) | Private(TypedDecl(_)) | Public(TypedDecl(_)) -> true | _ -> false) 
                       |> List.map (fun f -> match f with 
@@ -234,7 +236,7 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
       let allMethodsUnchecked =
          allMethodsWithThis |> List.filter (function TypedDef(_) | Private(TypedDef(_)) | Public(TypedDef(_)) -> true | _ -> false) 
                             |> List.map (fun f -> match f with 
-                                                  | TypedDef(m,args,t,b) | Public(TypedDef(m,args,t,b)) | Private(TypedDef(m,args,t,b)) -> 
+                                                  | TypedDef(m,args,t,b) -> 
                                                     m,makeArrowType n m args t
                                                   | _ -> failwith "Malformed method declaration")
       do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object((fields @ allMethodsUnchecked) |> Map.ofList)))) })
@@ -264,7 +266,8 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
             match m with
             | Assign(f,ArrowType(args,ret)) -> 
               match m_orig with
-              | Static _ -> ()
+              | Static _ -> 
+                yield f,ArrowType(args,ret)
               | _ ->
                 yield f,ArrowType(args,ret)
             | _ -> ()
@@ -297,12 +300,29 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
             ret()
       return res
     | New(c,argExprs) ->
+      let! argTypes = argExprs |> mapCo typeCheck
       let! s = getState
       match s.Classes.[c] with
       | Hidden(Object(ms))
-      | Object(ms) as o ->
-        return ClassType c
-      | _ -> return failwithf "Cannot find class %s" c
+      | Object(ms) ->
+        match ms.[c] with
+        | ArrowType(argTypesExpected, retT) ->
+          let localFrame = 
+            [
+              for a,i in Seq.zip argTypes [1..argTypes.Length] do
+              yield "arg$_" + string(i) + "$", a
+            ] |> Map.ofList
+          do! changeState (fun s -> { s with Variables = localFrame :: s.Variables })
+          if argTypes = argTypesExpected.Tail then
+            do! pause
+            do! changeState (fun s -> { s with Variables = (localFrame |> Map.add "ret" retT) :: s.Variables.Tail })
+            do! pause
+            do! changeState (fun s -> { s with Variables = s.Variables.Tail })
+            return retT
+          else
+            return failwithf "Incompatible types %A and %A" argTypes argTypesExpected
+        | _ -> return failwith ""
+      | _ -> return failwith ""
     | Return e ->
       let! res = typeCheck e
       do! changeState 
@@ -356,7 +376,7 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
                 yield "ret", None
                 yield "this", ClassType c
                 for a,i in Seq.zip argTypes [1..argTypes.Length] do
-                yield "$arg_" + string(i) + "$", a
+                yield "arg$_" + string(i) + "$", a
               ] |> Map.ofList
             do! changeState (fun s -> { s with Variables = localFrame :: s.Variables })
             if argTypes = argTypesExpected.Tail then
@@ -368,6 +388,31 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
             else
               return failwithf "Incompatible types %A and %A" argTypes argTypesExpected
           | _ -> return failwith ""
+        | _ -> return failwith ""
+      | _ -> return failwith ""
+    | StaticMethodCall(c,m,argExprs) ->
+      let! argTypes = argExprs |> mapCo typeCheck
+      let! s = getState
+      match s.Classes.[c] with
+      | Hidden(Object(ms))
+      | Object(ms) ->
+        match ms.[m] with
+        | ArrowType(argTypesExpected, retT) ->
+          let localFrame = 
+            [
+              yield "ret", None
+              for a,i in Seq.zip argTypes [1..argTypes.Length] do
+              yield "arg$_" + string(i) + "$", a
+            ] |> Map.ofList
+          do! changeState (fun s -> { s with Variables = localFrame :: s.Variables })
+          if argTypes = argTypesExpected then
+            do! pause
+            do! changeState (fun s -> { s with Variables = (localFrame |> Map.add "ret" retT) :: s.Variables.Tail })
+            do! pause
+            do! changeState (fun s -> { s with Variables = s.Variables.Tail })
+            return retT
+          else
+            return failwithf "Incompatible types %A and %A" argTypes argTypesExpected
         | _ -> return failwith ""
       | _ -> return failwith ""
     | End -> return None
@@ -405,31 +450,6 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
 //      | _ -> return failwith "Malformed if"
 //    | MainCall ->
 //      return! typeCheck (StaticMethodCall("Program","Main",[None]))
-//    | StaticMethodCall(c,m,argExprs) ->
-//      let! s = getState
-//      match s.Heap.[c] with
-//      | Hidden(Object(ms)) 
-//      | Object(ms) ->
-//        let! argVals = argExprs |> mapCo typeCheck
-//        let! s = getState
-//        match ms.[m] with
-//        | Hidden(ConstLambda(pc,argNames,body))
-//        | ConstLambda(pc,argNames,body) ->
-//          let c = Seq.zip argNames argVals |> Map.ofSeq |> Map.add "PC" (ConstInt pc) |> Map.add "ret" None
-//          do! setState { s with Stack = c :: s.Stack }
-//          do! pause
-//          let! res = typeCheck body
-//          match res with
-//          | None -> // automatically returned, pop stack frame here
-//            let! s = getState
-//            do! setState { s with Stack = (Map.empty |> Map.add "PC" s.Stack.Head.["PC"] |> Map.add "ret" res) :: s.Stack.Tail }
-//            do! pause
-//            do! setState { s with Stack = s.Stack.Tail }
-//            return res
-//          | _ -> 
-//            return res
-//        | _ -> return failwithf "Cannot call method %s on %s as it is not an object" m c
-//      | _ -> return failwithf "Cannot find class %s" c
     | c -> return failwithf "Unsupported construct %A" c
   }
 
