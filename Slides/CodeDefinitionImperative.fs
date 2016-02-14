@@ -191,7 +191,7 @@ type Code =
         StaticMethodCall("new Scanner(System.in)","nextLine",args).AsJava pre
       | StaticMethodCall(c,m,args) ->
         let argss = args |> List.map (fun a -> (a.AsJava "").TrimEnd([|'\n'|]) + ",")
-        sprintf "%s%s.%s(%s)\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
+        sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
         sprintf "%sif %s {\n%s } else {\n%s }\n" pre (c.AsJava "") (t.AsJava (pre + "  ")) (e.AsJava (pre + "  "))
       | While(c,b) ->
@@ -284,7 +284,7 @@ type Code =
         sprintf "%s%s.%s(%s);\n" pre n m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | StaticMethodCall(c,m,args) ->
         let argss = args |> List.map (fun a -> (a.AsCSharp "").TrimEnd([|'\n'|]) + ",")
-        sprintf "%s%s.%s(%s)\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
+        sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
         sprintf "%sif(%s) {\n%s } else {\n%s }\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) (e.AsCSharp (pre + "  "))
       | While(c,b) ->
