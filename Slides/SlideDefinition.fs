@@ -30,7 +30,7 @@ type SlideElement =
   | PythonStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpTypeTrace of TextSize * Code * TypeCheckingState<Code>
-  | LambdaStateTrace of textSize:TextSize * term:Term * maxSteps:Option<int> * showArithmetics:bool * showControlFlow:bool * showLet:bool
+  | LambdaStateTrace of textSize:TextSize * term:Term * maxSteps:Option<int> * showArithmetics:bool * showControlFlow:bool * showLet:bool * showPairs:bool * showUnions:bool
   with
     member this.ToStringAsElement() = 
       match this with
@@ -155,14 +155,14 @@ type SlideElement =
             let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s %s%s\\%s%s%s%s" beginFrame textSize (beginCode "[Sharp]C") ps endCode textSize stackLabel stack heap input output endFrame
             yield slide ]
         stackTraceTables |> List.fold (+) ""
-      | LambdaStateTrace(ts,term,maxSteps,showArithmetics,showControlFlow,showLet) ->
+      | LambdaStateTrace(ts,term,maxSteps,showArithmetics,showControlFlow,showLet,showPairs,showUnions) ->
         let textSize = ts.ToString()
         let states = 
           match maxSteps with
           | Some maxSteps ->
-            (id,term) :: runToEnd (BetaReduction.reduce maxSteps showArithmetics showControlFlow showLet pause) (id,term)
+            (id,term) :: runToEnd (BetaReduction.reduce maxSteps showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
           | _ ->
-            (id,term) :: runToEnd (BetaReduction.reduce System.Int32.MaxValue showArithmetics showControlFlow showLet pause) (id,term)
+            (id,term) :: runToEnd (BetaReduction.reduce System.Int32.MaxValue showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
         let terms = states |> List.map (fun (k,t) -> k t)
         let stackTraceTables = 
           [ for term,term' in Seq.zip terms (terms.Tail) do 

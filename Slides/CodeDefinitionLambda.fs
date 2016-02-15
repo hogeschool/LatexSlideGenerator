@@ -23,6 +23,12 @@ type Term =
   | Let of string * Term * Term
   | Highlighted of Term
   | Hidden of Term
+  | MakePair
+  | First
+  | Second
+  | Inl
+  | Inr
+  | Match
   with
     member this.ToLambdaInner =
       match this with
@@ -30,14 +36,20 @@ type Term =
       | Highlighted(Lambda(x,t)) ->
         sprintf @"(*@\underline{%s$\rightarrow$}@*) %s" x ((Highlighted t).ToLambdaInner)
       | _ -> this.ToLambda
+    member this.Length = 
+      match this with
+      | Highlighted t -> t.Length
+      | Application(t,u) -> t.Length + u.Length
+      | Lambda(x,t) -> 1 + t.Length
+      | _ -> 1
+
     member this.ToLambda =
       match this with
       | Var s -> s
       | Hidden t -> sprintf @"..."
       | Highlighted t -> 
-        let t_lambda = t.ToLambda
-        if t_lambda.Length <= 50 then
-          sprintf @"(*@\underline{%s}@*)" t_lambda
+        if t.Length <= 15 then
+          sprintf @"(*@\underline{%s}@*)" t.ToLambda
         else
           match t with
 //          | Application(Application(And,t),u) -> sprintf @"(%s $\wedge$ %s)" (t.ToLambda) (u.ToLambda)
@@ -61,6 +73,7 @@ type Term =
       | Application(Application(Mult,t),u) -> sprintf @"(%s $\times$ %s)" (t.ToLambda) (u.ToLambda)
       | Application(IsZero,t) -> sprintf @"(%s $=$ 0)" (t.ToLambda)
       | Application(Application(Application(If,c),t),e) -> sprintf "if %s then %s else %s" (c.ToLambda) (t.ToLambda) (e.ToLambda)
+      | Application(Application(MakePair,t),u) -> sprintf @"(%s, %s)" (t.ToLambda) (u.ToLambda)
       | Application(t,u) -> sprintf "(%s %s)" (t.ToLambda) (u.ToLambda)
       | Lambda(x,t) -> sprintf @"($\lambda$%s$\rightarrow$%s)" x (t.ToLambdaInner)
       | True -> sprintf "TRUE"
@@ -74,6 +87,12 @@ type Term =
       | Mult -> sprintf @"$\times$"
       | If -> sprintf "if-then-else"
       | Fix -> sprintf "fix"
+      | MakePair -> sprintf "(,)"
+      | First -> sprintf "$\pi_1$"
+      | Second -> sprintf "$\pi_2$"
+      | Match -> sprintf @"match"
+      | Inl -> sprintf @"inl"
+      | Inr -> sprintf @"inr"
       | Let(_bind,_expr,_in) -> sprintf "let %s = %s in %s" _bind _expr.ToLambda _in.ToLambda
     member this.ToString =
       match this with
@@ -87,6 +106,7 @@ type Term =
       | Application(Application(Mult,t),u) -> sprintf "(%s * %s)" (t.ToString) (u.ToString)
       | Application(IsZero,t) -> sprintf @"(%s $=$ 0)" (t.ToString)
       | Application(Application(Application(If,c),t),e) -> sprintf "if %s then %s else %s" (c.ToString) (t.ToString) (e.ToString)
+      | Application(Application(MakePair,t),u) -> sprintf @"(%s, %s)" (t.ToString) (u.ToString)
       | Application(t,u) -> sprintf "(%s %s)" (t.ToString) (u.ToString)
       | Lambda(x,t) -> sprintf @"(\%s.%s)" x (t.ToString)
       | True -> sprintf "TRUE"
@@ -100,6 +120,12 @@ type Term =
       | IsZero -> sprintf "0?"
       | If -> sprintf "if"
       | Fix -> sprintf "fix"
+      | MakePair -> sprintf "(,)"
+      | First -> sprintf "$\pi_1$"
+      | Second -> sprintf "$\pi_2$"
+      | Match -> sprintf @"match"
+      | Inl -> sprintf @"inl"
+      | Inr -> sprintf @"inr"
       | Let(_bind,_expr,_in) -> sprintf "let %s = %s in %s" _bind _expr.ToString _in.ToString
 
 let (!!) x = Var x
@@ -121,6 +147,13 @@ let invDefaultTerms, defaultTerms =
     IsZero, ("m" ==> ((!!"m" >>> ("x" ==> False)) >>> True))
 
     Fix, ("f" ==> (("x" ==> (!!"f" >>> (!!"x" >>> !!"x"))) >>> ("x" ==> (!!"f" >>> (!!"x" >>> !!"x")))))
+    MakePair, ("x" ==> ("y" ==> ("f" ==> ((!!"f" >>> !!"x") >>> !!"y"))))
+    First, ("p" ==> (!!"p" >>> ("x" ==> ("y" ==> (!!"x")))))
+    Second, ("p" ==> (!!"p" >>> ("x" ==> ("y" ==> (!!"y")))))
+
+    Inl, ("x" ==> ("f" ==> ("g" ==> (!!"f" >>> !!"x"))))
+    Inr, ("y" ==> ("f" ==> ("g" ==> (!!"g" >>> !!"y"))))
+    Match, ("u" ==> ("f" ==> ("g" ==> ((!!"u" >>> !!"f") >>> !!"g"))))
   ] |> (fun l -> l |> List.map (fun (x,y) -> y,x) |> Map.ofList, l |> Map.ofList)
 
 let deltaRules (t:Term) : Option<Term> =
@@ -149,6 +182,10 @@ let inverseDeltaRules (t:Term) : Option<Term> =
     Some v
   | _ ->
     match t with
+    | Lambda("f",Lambda("g",Application(Var "f", t))) ->
+      Some(Application(Inl, t))
+    | Lambda("f",Lambda("g",Application(Var "g", t))) ->
+      Some(Application(Inr, t))
     | Lambda("s",Lambda("z",t)) ->
       let rec loop t = 
         match t with
