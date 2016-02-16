@@ -30,7 +30,7 @@ type SlideElement =
   | PythonStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpTypeTrace of TextSize * Code * TypeCheckingState<Code>
-  | LambdaStateTrace of TextSize * Term * Option<int>
+  | LambdaStateTrace of textSize:TextSize * term:Term * maxSteps:Option<int> * showArithmetics:bool * showControlFlow:bool * showLet:bool * showPairs:bool * showUnions:bool
   with
     member this.ToStringAsElement() = 
       match this with
@@ -122,7 +122,7 @@ type SlideElement =
         let ps = (p.AsPython "").TrimEnd([|'\n'|])
         let stackTraceTables = 
           [ for st in stackTraces do 
-            let stack,heap,output,input = st.AsSlideContent Dots (function Hidden _ -> true | _ -> false) (fun c -> c.AsPython)
+            let stack,heap,output,input = st.AsSlideContent Dots (function Code.Hidden _ -> true | _ -> false) (fun c -> c.AsPython)
             let input = if input = "" then "" else "Input: " + input + @"\\"
             let output = if output = "" then "" else "Output: " + output + @"\\"
             let heap = if heap = "" then "" else "Heap: " + heap + @"\\"
@@ -135,7 +135,7 @@ type SlideElement =
         let ps = (p.AsCSharp "").TrimEnd([|'\n'|])
         let stackTraceTables = 
           [ for st in stackTraces do 
-            let declarations,classes = st.AsSlideContent Dots (function Hidden _ -> true | _ -> false) ConstInt (fun (c:Code) -> c.AsCSharp)
+            let declarations,classes = st.AsSlideContent Dots (function Code.Hidden _ -> true | _ -> false) ConstInt (fun (c:Code) -> c.AsCSharp)
             let declarations = if declarations = "" then "" else "Declarations: " + declarations
             let classes = if classes = "" then "" else "Classes: " + classes
             let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s %s\\%s%s" beginFrame textSize (beginCode "[Sharp]C") ps endCode textSize declarations classes endFrame
@@ -148,26 +148,26 @@ type SlideElement =
         let ps = (p.AsCSharp "").TrimEnd([|'\n'|])
         let stackTraceTables = 
           [ for st in stackTraces do 
-            let stack,heap,input,output = st.AsSlideContent Dots (function Hidden _ -> true | _ -> false) (fun c -> c.AsCSharp)
+            let stack,heap,input,output = st.AsSlideContent Dots (function Code.Hidden _ -> true | _ -> false) (fun c -> c.AsCSharp)
             let input = if input = "" then "" else "Input: " + input + @"\\"
             let output = if output = "" then "" else "Output: " + output + @"\\"
             let heap = if heap = "" then "" else heapLabel + heap + @"\\"
             let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s %s%s\\%s%s%s%s" beginFrame textSize (beginCode "[Sharp]C") ps endCode textSize stackLabel stack heap input output endFrame
             yield slide ]
         stackTraceTables |> List.fold (+) ""
-      | LambdaStateTrace(ts,term,maxSteps) ->
+      | LambdaStateTrace(ts,term,maxSteps,showArithmetics,showControlFlow,showLet,showPairs,showUnions) ->
         let textSize = ts.ToString()
         let states = 
           match maxSteps with
           | Some maxSteps ->
-            (id,term) :: runToEnd (CodeDefinitionLambda.reduce maxSteps pause) (id,term)
+            (id,term) :: runToEnd (BetaReduction.reduce maxSteps showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
           | _ ->
-            (id,term) :: runToEnd (CodeDefinitionLambda.reduce System.Int32.MaxValue pause) (id,term)
+            (id,term) :: runToEnd (BetaReduction.reduce System.Int32.MaxValue showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
         let terms = states |> List.map (fun (k,t) -> k t)
         let stackTraceTables = 
-          [ for term,term' in Seq.zip terms (Seq.tail terms) do 
-            let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s\pause%s%s%s%s" beginFrame textSize (beginCode "ML") (term.ToLambda) endCode (beginCode "ML") (term'.ToLambda) endCode endFrame
-            yield slide ]
+          [ for term,term' in Seq.zip terms (terms.Tail) do 
+              let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s\pause%s%s%s%s" beginFrame textSize (beginCode "ML") (term.ToLambda) endCode (beginCode "ML") (term'.ToLambda) endCode endFrame
+              yield slide ]
         let res = stackTraceTables |> List.fold (+) ""
         res
       | _ -> failwith "Unsupported"
