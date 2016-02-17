@@ -30,6 +30,13 @@ type Term =
   | Inr
   | Match
   with
+    member t.replace (x:string) (u:Term) : Term =
+      match t with
+      | Var s when s = x -> u
+      | Lambda(t,f) when t <> x -> Lambda(t, f.replace x u)
+      | Application(t,f) -> Application(t.replace x u,f.replace x u)
+      | _ -> t
+
     member this.ToLambdaInner =
       match this with
       | Lambda(x,t) -> sprintf @"%s$\rightarrow$%s" x (t.ToLambdaInner)
@@ -127,6 +134,56 @@ type Term =
       | Inl -> sprintf @"inl"
       | Inr -> sprintf @"inr"
       | Let(_bind,_expr,_in) -> sprintf "let %s = %s in %s" _bind _expr.ToString _in.ToString
+    member this.ToFSharpInner pre =
+      match this with
+      | Lambda(x,t) -> sprintf @"%s %s" x (t.ToFSharpInner pre)
+      | Highlighted(Lambda(x,t)) ->
+        Lambda(x,t).ToFSharpInner pre
+      | _ -> sprintf "->\n%s" (this.ToFSharp (pre + "  "))
+    member this.ToFSharp pre =
+      match this with
+      | Var s -> pre + s
+      | Hidden t -> sprintf @"..."
+      | Highlighted t -> t.ToFSharp pre
+      | Application(Application(And,t),u) -> sprintf "%s(%s && %s)" pre (t.ToFSharp "") (u.ToFSharp "")
+      | Application(Application(Or,t),u) -> sprintf "%s(%s || %s)" pre (t.ToFSharp "") (u.ToFSharp "")
+      | Application(Application(Plus,t),u) -> sprintf "%s(%s + %s)" pre (t.ToFSharp "") (u.ToFSharp "")
+      | Application(Application(Minus,t),u) -> sprintf @"%s(%s - %s)" pre (t.ToFSharp "") (u.ToFSharp "")
+      | Application(Application(Mult,t),u) -> sprintf "%s(%s * %s)" pre (t.ToFSharp "") (u.ToFSharp "")
+      | Application(IsZero,t) -> sprintf @"%s(%s = 0)" pre (t.ToFSharp "")
+      | Application(Application(Application(If,c),t),e) -> sprintf "%sif %s then\n%s\n%selse\n%s\n" pre (c.ToFSharp "") (t.ToFSharp (pre + "  ")) pre (e.ToFSharp (pre + "  "))
+      | Application(Application(MakePair,t),u) -> sprintf @"%s(%s, %s)" pre (t.ToFSharp "") (u.ToFSharp "")
+      | Application(Application(Application(Match, t), Lambda(x,f)), (Lambda(y,g))) ->
+        let f' = f.replace x (Var"x")
+        let g' = g.replace y (Var"y")
+        sprintf "%smatch %s with\n%s| Choice1Of2 x ->\n %s\n%s| Choice2Of2 y -> \n%s\n" pre (t.ToFSharp "") pre (f'.ToFSharp (pre + "  ")) pre (g'.ToFSharp (pre + "  "))
+      | Let(f_name,Lambda(x,t),u) ->
+        sprintf "%slet %s = \n%sfun %s %s\n%s" pre f_name (pre + "  ") x (t.ToFSharpInner (pre + "  ")) (u.ToFSharp (pre))
+      | Let(f_name,Application(Fix,Lambda(f,Lambda(x,t))),u) ->
+        let t' = t.replace f (Var f_name)
+        sprintf "%slet rec %s = \n%sfun %s %s\n%s" pre f_name (pre + "  ") x (t'.ToFSharpInner (pre + "  ")) (u.ToFSharp (pre))
+      | Application(t,u) -> sprintf "%s(%s %s)" pre (t.ToFSharp "") (u.ToFSharp "")
+      | Lambda(x,t) -> 
+        let t_inner = (t.ToFSharpInner pre)
+        sprintf @"%s(fun %s %s)" pre x t_inner
+      | True -> sprintf "true"
+      | False -> sprintf "false"
+      | And -> sprintf "(&&)"
+      | Or -> sprintf "(||)"
+      | Not -> sprintf "not"
+      | Plus -> sprintf "(+)"
+      | Minus -> sprintf "(-)"
+      | Mult -> sprintf "(*)"
+      | IsZero -> sprintf "((=) 0)"
+      | If -> sprintf "if"
+      | Fix -> sprintf "letrec"
+      | MakePair -> sprintf "(,)"
+      | First -> sprintf "fst"
+      | Second -> sprintf "snd"
+      | Match -> sprintf @"match"
+      | Inl -> sprintf @"Choice1Of2"
+      | Inr -> sprintf @"Choice2Of2"
+      | Let(_bind,_expr,_in) -> sprintf "%slet %s = \n%s\n%s" pre _bind (_expr.ToFSharp (pre + "  ")) (_in.ToFSharp pre)
 
 let (!!) x = Var x
 let (>>>) t u = Application(t,u)

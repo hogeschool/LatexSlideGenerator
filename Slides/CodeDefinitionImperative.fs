@@ -284,11 +284,14 @@ type Code =
         sprintf "%s%s.%s(%s);\n" pre n m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | StaticMethodCall(c,m,args) ->
         let argss = args |> List.map (fun a -> (a.AsCSharp "").TrimEnd([|'\n'|]) + ",")
-        sprintf "%s%s.%s(%s)\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
+        if argss.Length = 1 then
+          sprintf "%s%s.%s%s;\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
+        else
+          sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
-        sprintf "%sif(%s) {\n%s } else {\n%s }\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) (e.AsCSharp (pre + "  "))
+        sprintf "%sif %s {\n%s } else {\n%s }\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) (e.AsCSharp (pre + "  "))
       | While(c,b) ->
-        sprintf "%swhile(%s) {\n%s }\n" pre (c.AsCSharp "") (b.AsCSharp (pre + "  "))
+        sprintf "%swhile %s {\n%s }\n" pre (c.AsCSharp "") (b.AsCSharp (pre + "  "))
       | Op(a,op,b) ->
         sprintf "(%s %s %s)" ((a.AsCSharp "").Replace("\n","").Replace(";","").Replace("  ","")) (op.AsCSharp) ((b.AsCSharp (pre + "")).Replace("\n","").Replace(";","").Replace("  ",""))
       | Sequence (p,q) ->

@@ -19,6 +19,7 @@ type SlideElement =
   | Items of List<SlideElement>
   | PythonCodeBlock of TextSize * Code
   | LambdaCodeBlock of TextSize * Term
+  | FSharpCodeBlock of TextSize * Term
   | CSharpCodeBlock of TextSize * Code
   | Unrepeated of SlideElement
   | Tiny
@@ -54,6 +55,9 @@ type SlideElement =
       | PythonCodeBlock (ts,c) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}%s%s%s" textSize (beginCode "Python") (c.AsPython "") endCode, []
+      | FSharpCodeBlock (ts, c) ->
+          let textSize = ts.ToString()
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp "") endCode, []
       | LambdaCodeBlock(ts, c) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (c.ToLambda) endCode, []
@@ -100,6 +104,9 @@ type SlideElement =
       | PythonCodeBlock (ts,c) ->
           let textSize = ts.ToString()
           sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s" beginFrame textSize (beginCode "Python") (c.AsPython "") endCode endFrame
+      | FSharpCodeBlock (ts, c) ->
+          let textSize = ts.ToString()
+          sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToFSharp "") endCode endFrame
       | LambdaCodeBlock (ts, c) ->
           let textSize = ts.ToString()
           sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToLambda) endCode endFrame

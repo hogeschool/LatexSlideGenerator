@@ -272,9 +272,4 @@ let rec reduce maxSteps showArithmetics showControlFlow showLet showPairs showUn
     }
   reduce maxSteps (fun _ _ -> ret false) p
 
-and replace t x u =
-  match t with
-  | Var s when s = x -> u
-  | Lambda(t,f) when t <> x -> Lambda(t, replace f x u)
-  | Application(t,f) -> Application(replace t x u,replace f x u)
-  | _ -> t
+and replace (t:Term) x u = t.replace x u
