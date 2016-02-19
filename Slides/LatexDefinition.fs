@@ -1,4 +1,5 @@
-﻿module SlideDefinition
+﻿module LatexDefinition
+
 open CodeDefinitionImperative
 open CodeDefinitionLambda
 open Coroutine
@@ -7,32 +8,93 @@ open Runtime
 open TypeChecker
 open Interpreter
 
-type SlideElement = 
+type LatexElement = 
   | Section of string 
-  | Advanced of SlideElement
+  | Advanced of LatexElement
   | SubSection of string 
+  | Paragraph of string 
   | Pause
   | Question of string
   | InlineCode of string
   | Text of string
-  | Block of SlideElement
-  | Items of List<SlideElement>
+  | Block of LatexElement
+  | Items of List<LatexElement>
   | PythonCodeBlock of TextSize * Code
   | LambdaCodeBlock of TextSize * Term
   | FSharpCodeBlock of TextSize * Term
   | CSharpCodeBlock of TextSize * Code
-  | Unrepeated of SlideElement
+  | Unrepeated of LatexElement
   | Tiny
   | Small
   | Normal
   | Large
   | TypingRules of List<TypingRule>
-  | VerticalStack of List<SlideElement>
+  | VerticalStack of List<LatexElement>
   | PythonStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpTypeTrace of TextSize * Code * TypeCheckingState<Code>
   | LambdaStateTrace of textSize:TextSize * term:Term * maxSteps:Option<int> * showArithmetics:bool * showControlFlow:bool * showLet:bool * showPairs:bool * showUnions:bool
   with
+    member this.ToDocumentString() = 
+      match this with
+      | Section t ->
+        sprintf @"\section{%s}%s" t "\n"
+      | SubSection t ->
+        sprintf @"\subsection{%s}%s" t "\n"
+      | Paragraph t ->
+        sprintf @"\paragraph{%s}%s" t "\n"
+      | Pause -> @""
+      | Question q -> 
+          sprintf @"\textit{%s}" q
+      | InlineCode c -> sprintf @"\texttt{%s}" c
+      | Text t -> t
+      | Tiny -> sprintf "\\tiny\n"
+      | Small -> sprintf "\\small\n"
+      | Normal -> sprintf "\\normal\n"
+      | Large -> sprintf "\\large\n"
+      | Block t ->
+        let ts = t.ToDocumentString()
+        sprintf @"%s" ts
+      | Items items ->
+        let items = items |> List.map (function | Pause -> @"" | item -> let i = item.ToDocumentString() in @"\item " + i + "\n")
+        sprintf @"%s%s%s" beginItemize (items |> Seq.fold (+) "" ) endItemize
+      | PythonCodeBlock (ts,c) ->
+          let textSize = ts.ToString()
+          sprintf @"\lstset{basicstyle=\ttfamily%s}%s%s%s" textSize (beginCode "Python") (c.AsPython "") endCode
+      | PythonStateTrace(ts,p,st) ->
+        let textSize = ts.ToString()
+        let stackTraces = st :: runToEnd (runPython p) st
+        let ps = (p.AsPython "").TrimEnd([|'\n'|])
+        let stackTraceTables = 
+          [ 
+            yield sprintf @"\lstset{basicstyle=\ttfamily%s}%s%s%s  " textSize (beginCode "Python") ps endCode
+            for st in stackTraces do 
+              let stack,heap,input,output = st.AsSlideContent Dots (function Code.Hidden _ -> true | _ -> false) (fun c -> c.AsPython)
+              let input = if input = "" then "" else "Input: " + input + @"\\"
+              let output = if output = "" then "" else "Output: " + output + @"\\"
+              let heap = if heap = "" then "" else "Heap: " + heap + @"\\"
+              let slide = sprintf @"%s Stack: %s\\%s%s" textSize stack input output
+              yield slide ]
+        stackTraceTables |> List.fold (+) ""
+      | FSharpCodeBlock (ts, c) ->
+          let textSize = ts.ToString()
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp "") endCode
+      | LambdaCodeBlock(ts, c) ->
+          let textSize = ts.ToString()
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (c.ToLambda) endCode
+      | Unrepeated s ->
+        s.ToDocumentString()
+      | CSharpCodeBlock (ts,c) ->
+          let textSize = ts.ToString()
+          sprintf @"\lstset{basicstyle=\ttfamily%s}%s%s%s" textSize (beginCode "[Sharp]C") (c.AsCSharp "") endCode
+      | TypingRules tr ->
+          let trs = tr |> List.map (fun t -> t.ToString())
+          (List.fold (+) "" trs)
+      | VerticalStack items ->
+          let items = items |> List.map (fun item -> let i = item.ToDocumentString() in @"\item " + i + "\n")
+          let allItems = items |> List.map (fun i -> i + " \n") |> List.fold (+) ""
+          allItems
+      | _ -> ""
     member this.ToStringAsElement() = 
       match this with
       | Pause -> @"\pause", []
@@ -61,6 +123,8 @@ type SlideElement =
       | LambdaCodeBlock(ts, c) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (c.ToLambda) endCode, []
+      | Unrepeated s ->
+        s.ToStringAsElement() |> fst,[]
       | CSharpCodeBlock (ts,c) ->
           let textSize = ts.ToString()
           let javaVersion = "\n\n" + sprintf @"%s %sWhich in Java then becomes:%s \lstset{basicstyle=\ttfamily%s}%s%s%s%s" beginFrame beginExampleBlock endExampleBlock textSize (beginCode "Java") (c.AsJava "") endCode endFrame
@@ -78,7 +142,7 @@ type SlideElement =
           let allItems = items |> List.map (fun i -> i + " \n") |> List.fold (+) ""
           allItems,k
       | _ -> "", []
-    override this.ToString() =
+    member this.ToBeamerString() =
       match this with
       | Section t ->
         sprintf @"\SlideSection{%s}%s" t "\n"
@@ -86,7 +150,7 @@ type SlideElement =
         sprintf @"\SlideSubSection{%s}%s" t "\n"
       | Advanced se ->
         //TODO: \footnote{Warning: this material is to be considered advanced!}
-        se.ToString()
+        se.ToBeamerString()
       | Block t ->
         let content,rest = t.ToStringAsElement()
         sprintf @"%s%s%s%s%s" beginFrame beginBlock content endBlock endFrame
@@ -177,6 +241,8 @@ type SlideElement =
               yield slide ]
         let res = stackTraceTables |> List.fold (+) ""
         res
+      | Unrepeated s ->
+        s.ToBeamerString()
       | _ -> failwith "Unsupported"
 
 and TypingRule =
@@ -197,7 +263,7 @@ let (!!) = InlineCode
 let ItemsBlock l = l |> Items |> Block 
 let TextBlock l = l |> Text |> Block 
 
-let rec generateLatexFile author title (slides:List<SlideElement>) =
+let rec generatePresentation author title (slides:List<LatexElement>) =
   @"\documentclass{beamer}
 \usetheme[hideothersubsections]{HRTheme}
 \usepackage{beamerthemeHRTheme}
@@ -228,7 +294,7 @@ Rotterdam, Netherlands}
 
 \begin{document}
 \maketitle
-" + (List.map (fun x -> x.ToString()) slides |> List.fold (+) "") + @"
+" + (slides |> List.map (fun x -> x.ToBeamerString()) |> List.fold (+) "") + @"
 \begin{frame}{This is it!}
 \center
 \fontsize{18pt}{7.2}\selectfont
@@ -236,4 +302,45 @@ The best of luck, and thanks for the attention!
 \end{frame}
 
 \end{document}"
-  
+
+
+let rec generateDocument author title (elements:List<LatexElement>) =
+  @"\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage{soul,xcolor}
+\usepackage{colortbl}
+\usepackage{color}
+\newcommand{\red}[1]{
+\textcolor{red}{#1}
+}
+\newcommand{\white}[1]{
+\textcolor{white}{#1}
+}
+\usepackage{listings}
+\usepackage{tabularx}
+\lstset{language=C,
+basicstyle=\ttfamily\footnotesize,
+frame=single,
+numbers=left,
+breaklines=true,
+escapeinside={(*@}{@*)},
+mathescape=true,
+breaklines=true}
+\lstset{
+  literate={ï}{{\""i}}1
+           {ì}{{\`i}}1
+}
+
+\title{" + title + @"}
+
+\author{" + author + @"}
+
+\date{}
+
+\begin{document}
+\maketitle
+" + (elements |> List.map (fun x -> x.ToDocumentString()) |> List.fold (+) "") + @"
+
+\end{document}"

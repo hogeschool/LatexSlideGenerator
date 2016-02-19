@@ -3,19 +3,26 @@
 open Coroutine
 open CommonLatex
 
-type Operator = Plus | Minus | Times | DividedBy | GreaterThan
+type Operator = Plus | Minus | Times | DividedBy | GreaterThan | Equals
   with
     member this.AsPython =
       match this with
       | Plus -> "+"
       | Minus -> "-"
       | Times -> "*"
-      | DividedBy -> "/"
+      | DividedBy -> "//"
       | GreaterThan -> ">"
+      | Equals -> "=="
     member this.AsCSharp =
       match this with
+      | DividedBy -> "/"
       | _ -> this.AsPython
     member this.AsJava = this.AsCSharp
+
+let toJavaType =
+  function
+  | "bool" -> "boolean"
+  | t -> t
 
 let (!+) = List.fold (+) ""
 
@@ -54,6 +61,7 @@ type Code =
   | MethodCall of string * string * List<Code>
   | StaticMethodCall of string * string * List<Code>
   | If of Code * Code * Code
+  | IfThen of Code * Code
   | While of Code * Code
   | Op of Code * Operator * Code
   | Sequence of Code * Code
@@ -98,7 +106,10 @@ type Code =
         sprintf "%s%s.%s(%s)\n" pre c m ((!+argss).TrimEnd[|','|])
       | If(c,t,e) ->
         let tS = (t.AsPython (pre + "  "))
-        sprintf "%sif %s:\n%s%selse:\n%s" pre (c.AsPython "") tS pre (e.AsPython (pre + "  "))
+        sprintf "%sif %s:\n%s%selse:\n%s" pre ((c.AsPython "").TrimEnd([|'\n'|])) tS pre (e.AsPython (pre + "  "))
+      | IfThen(c,t) ->
+        let tS = (t.AsPython (pre + "  "))
+        sprintf "%sif %s:\n%s" pre ((c.AsPython "").TrimEnd([|'\n'|])) tS
       | While(c,b) ->
         let bs = (b.AsPython (pre + "  "))
         sprintf "%swhile %s:\n%s" pre (c.AsPython "") bs
@@ -153,10 +164,10 @@ type Code =
         sprintf "%sreturn %s;\n" pre ((c.AsJava "").TrimEnd[|','; '\n'; ';'|])
       | TypedDecl(s,t,Option.None) -> 
         if t = "" then sprintf "%s%s;\n" pre s
-        else sprintf "%s%s %s;\n" pre t s
+        else sprintf "%s%s %s;\n" pre (toJavaType t) s
       | TypedDecl(s,t,Some v) -> 
         if t = "" then sprintf "%s%s = %s;\n" pre s ((v.AsJava "").TrimEnd[|','; '\n'; ';'|])
-        else sprintf "%s%s %s = %s;\n" pre t s ((v.AsJava "").TrimEnd[|','; '\n'; ';'|])
+        else sprintf "%s%s %s = %s;\n" pre (toJavaType t) s ((v.AsJava "").TrimEnd[|','; '\n'; ';'|])
       | Var s -> s
       | ConstBool b -> b.ToString().ToLower()
       | ConstInt i -> i.ToString()
@@ -171,7 +182,7 @@ type Code =
         let argss = args |> List.map (fun (t,a) -> t + " " + a + ",")
         sprintf "%s%s %s(%s);\n" pre t n ((!+argss).TrimEnd[|','; '\n'|])
       | TypedDef (n,args,t,body) ->
-        let argss = args |> List.map (fun (t,a) -> t + " " + a + ",")
+        let argss = args |> List.map (fun (t,a) -> (toJavaType t) + " " + a + ",")
         (if t = "" then sprintf "%s%s(%s) {\n%s%s}\n" pre n
          else sprintf "%s%s %s(%s) {\n%s%s}\n" pre t n) ((!+argss).TrimEnd[|','; '\n'|]) (body.AsJava (pre + "  ")) pre
       | New(c,args) ->
@@ -191,7 +202,7 @@ type Code =
         StaticMethodCall("new Scanner(System.in)","nextLine",args).AsJava pre
       | StaticMethodCall(c,m,args) ->
         let argss = args |> List.map (fun a -> (a.AsJava "").TrimEnd([|'\n'|]) + ",")
-        sprintf "%s%s.%s(%s)\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
+        sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
         sprintf "%sif %s {\n%s } else {\n%s }\n" pre (c.AsJava "") (t.AsJava (pre + "  ")) (e.AsJava (pre + "  "))
       | While(c,b) ->
@@ -285,7 +296,7 @@ type Code =
       | StaticMethodCall(c,m,args) ->
         let argss = args |> List.map (fun a -> (a.AsCSharp "").TrimEnd([|'\n'|]) + ",")
         if argss.Length = 1 then
-          sprintf "%s%s.%s%s;\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
+          sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
         else
           sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
@@ -321,6 +332,7 @@ let interfaceDef c m = InterfaceDef(c,m)
 let classDef c m = ClassDef(c,m)
 let (:=) x y = Assign(x,y)
 let newC c a = New(c,a)
+let constBool x = ConstBool(x)
 let constInt x = ConstInt(x)
 let constFloat x = ConstFloat(x)
 let constString x = ConstString(x)
@@ -337,12 +349,14 @@ let staticMethodCall c m l = StaticMethodCall(c,m,l)
 let mainCall = MainCall
 let methodCall x m l = MethodCall(x,m,l)
 let ifelse c t e = If(c,t,e)
+let ifthen c t = IfThen(c,t)
 let whiledo c b = While(c,b)
 let (.+) a b = Op(a, Plus, b)
 let (.-) a b = Op(a, Minus, b)
 let (.*) a b = Op(a, Times, b)
 let (./) a b = Op(a, DividedBy, b)
 let (.>) a b = Op(a, GreaterThan, b)
+let (.=) a b = Op(a, Equals, b)
 let (>>) a b = Sequence(a, b)
 let endProgram = End
 let toString c = ToString c

@@ -58,7 +58,7 @@
     <Compile Include="Interpreter.fs" />
     <Compile Include="BetaReduction.fs" />
     <Compile Include="TypeChecker.fs" />
-    <Compile Include="SlideDefinition.fs" />
+    <Compile Include="LatexDefinition.fs" />
     <Compile Include="Working together as teachers.fs" />
     <Compile Include="Compile.fs" />
     <None Include="App.config" />

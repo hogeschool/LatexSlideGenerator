@@ -101,6 +101,8 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
     | Var v -> 
       let! s = getState
       return lookup s v
+    | ConstBool b ->
+      return ConstBool b
     | ConstInt i ->
       return ConstInt i
     | ConstFloat f ->
@@ -130,6 +132,11 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
       let! s = getState
       do! setState { s with Heap = (s.Heap |> Map.add f (Hidden(ConstLambda(pc+1,args,body)))) }
       return Assign(f, ConstLambda(pc+1,args,body))
+    | Call("print",[arg]) ->
+      let! argVal = interpret arg
+      do! changeState (fun s -> { s with OutputStream = (argVal |> toString) :: s.OutputStream })
+      let! s = getState
+      return None
     | Call(f,argExprs) ->
       let! argVals = argExprs |> mapCo interpret
       let! s = getState
@@ -179,11 +186,11 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
       match cVal with
       | ConstBool true ->
         let! res = interpret (Sequence(End,body))
-        do! changePC (fun pc -> pc - body_nl)
+        do! changePC (fun pc -> pc - body_nl - 1)
         do! pause
         return! interpret(While(c,body))
       | ConstBool false ->
-        do! changePC ((+) ((body_nl) + 1))
+        do! changePC ((+) (body_nl))
         return None
       | _ -> return failwith "Malformed if"
     | If(c,t,e) ->
@@ -203,12 +210,14 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
       let! _ = interpret p
       do! incrPC
       do! match p with
-          | Def(_) | ClassDef(_) | InterfaceDef(_) -> 
+          | Hidden(_) | Def(_) | ClassDef(_) | InterfaceDef(_) -> 
             ret ()
           | _ ->
             pause
       return! interpret k
-    | End -> return None
+    | End -> 
+      let! s = getState
+      return None
     | Implementation i -> return None
     | InterfaceDef (n,ms) as intf ->
       let! pc = getPC

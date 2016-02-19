@@ -1,7 +1,7 @@
 ﻿module Working_together_as_teachers
 
 open CommonLatex
-open SlideDefinition
+open LatexDefinition
 open CodeDefinitionImperative
 open Interpreter
 open Runtime
