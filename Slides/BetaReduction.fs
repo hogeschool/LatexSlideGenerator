@@ -1,7 +1,7 @@
 ﻿module BetaReduction
 
-open Coroutine
 open CodeDefinitionLambda
+open Coroutine
 
 
 let (|ConstInt|_|) =
@@ -13,7 +13,7 @@ let (|ConstInt|_|) =
   | _ ->
     None
 
-let rec reduce maxSteps showArithmetics showControlFlow showLet showPairs showUnions p = 
+let rec reduce maxSteps expandInsideLambda showArithmetics showControlFlow showLet showPairs showUnions p = 
   let rec reduce maxSteps on_lambda p : Coroutine<(Term -> Term) * Term, bool> =
     let rec reduce_lambda x f =
       co{
@@ -47,12 +47,11 @@ let rec reduce maxSteps showArithmetics showControlFlow showLet showPairs showUn
             return! on_lambda x f
           | Application(Lambda(x,f),u) ->
               do! setState ((fun u -> k(Application(Lambda(x,f),u))), u)
-              let! replaced = reduce_step on_lambda p
-              do! if replaced then p else ret ()
+              let! replaced = reduce (maxSteps - 1) on_lambda p
               let! (k1,v) = getState
               do! setState ((fun v -> k(Highlighted(Application(Lambda(x,f),v)))), v)
               do! p
-              let f_new = replace f x v
+              let f_new = replace f (fst x) v
               do! setState (k,f_new)
               do! p
               return true
@@ -198,7 +197,7 @@ let rec reduce maxSteps showArithmetics showControlFlow showLet showPairs showUn
             let! replacedT = reduce (maxSteps-1) on_lambda p
             let! (k1,t_new) = getState
             do! if not replacedT then setState ((fun t -> k(Highlighted(Let(x,t,u)))), t_new) >> p else ret ()
-            let u_new = replace u x t_new
+            let u_new = replace u (fst x) t_new
             do! setState ((fun u -> k(u)), u_new)
             do! p
             let! replacedU = reduce_step on_lambda p
@@ -207,7 +206,7 @@ let rec reduce maxSteps showArithmetics showControlFlow showLet showPairs showUn
           | Application(Fix,Lambda(f,t)) as fix ->
             do! setState ((fun f -> k(Highlighted(Application(Fix,f)))), Lambda(f,t))
             do! p
-            let t_new = replace t f (Hidden fix)
+            let t_new = replace t (fst f) (Hidden fix)
             do! setState (k, t_new)
             do! p
             let! replacedF = reduce_step on_lambda p
@@ -220,6 +219,18 @@ let rec reduce maxSteps showArithmetics showControlFlow showLet showPairs showUn
             return false
           | ConstInt(i) when not showArithmetics ->
             return false
+          | TypeLambda(a,t) ->
+            do! setState (k, t)
+            let! replacedT = reduce_step on_lambda p
+            let! (k1,t_new) = getState
+            do! setState (k,t_new)
+            return replacedT
+          | TypeApplication(t,a) ->
+            do! setState (k, t)
+            let! replacedT = reduce_step on_lambda p
+            let! (k1,t_new) = getState
+            do! setState (k,t_new)
+            return replacedT
           | Application(t,u) ->
             do! setState ((fun t -> k(Application(t,u))), t)
             let! replacedT = reduce_step on_lambda p
@@ -255,7 +266,7 @@ let rec reduce maxSteps showArithmetics showControlFlow showLet showPairs showUn
       if replaced then
         return! reduce (maxSteps-1) on_lambda p
       else
-        let! replaced = reduce_step reduce_lambda p
+        let! replaced = reduce_step (if expandInsideLambda then reduce_lambda else (fun _ _ -> ret false)) p
         if replaced then 
           return! reduce (maxSteps-1) on_lambda p
         else
@@ -272,4 +283,4 @@ let rec reduce maxSteps showArithmetics showControlFlow showLet showPairs showUn
     }
   reduce maxSteps (fun _ _ -> ret false) p
 
-and replace (t:Term) x u = t.replace x u
+and replace (t:Term) (x:string) u = t.replace x u

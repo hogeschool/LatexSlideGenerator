@@ -33,7 +33,7 @@ type LatexElement =
   | PythonStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpTypeTrace of TextSize * Code * TypeCheckingState<Code>
-  | LambdaStateTrace of textSize:TextSize * term:Term * maxSteps:Option<int> * showArithmetics:bool * showControlFlow:bool * showLet:bool * showPairs:bool * showUnions:bool
+  | LambdaStateTrace of textSize:TextSize * term:Term * maxSteps:Option<int> * expandInsideLambda:bool * showArithmetics:bool * showControlFlow:bool * showLet:bool * showPairs:bool * showUnions:bool
   with
     member this.ToDocumentString() = 
       match this with
@@ -78,10 +78,10 @@ type LatexElement =
         stackTraceTables |> List.fold (+) ""
       | FSharpCodeBlock (ts, c) ->
           let textSize = ts.ToString()
-          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp "") endCode
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp PrintTypes.Untyped "") endCode
       | LambdaCodeBlock(ts, c) ->
           let textSize = ts.ToString()
-          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (c.ToLambda) endCode
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (c.ToLambda PrintTypes.Untyped) endCode
       | Unrepeated s ->
         s.ToDocumentString()
       | CSharpCodeBlock (ts,c) ->
@@ -119,10 +119,10 @@ type LatexElement =
           sprintf @"\lstset{basicstyle=\ttfamily%s}%s%s%s" textSize (beginCode "Python") (c.AsPython "") endCode, []
       | FSharpCodeBlock (ts, c) ->
           let textSize = ts.ToString()
-          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp "") endCode, []
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp PrintTypes.Untyped "") endCode, []
       | LambdaCodeBlock(ts, c) ->
           let textSize = ts.ToString()
-          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (c.ToLambda) endCode, []
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (c.ToLambda PrintTypes.Untyped) endCode, []
       | Unrepeated s ->
         s.ToStringAsElement() |> fst,[]
       | CSharpCodeBlock (ts,c) ->
@@ -170,10 +170,10 @@ type LatexElement =
           sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s" beginFrame textSize (beginCode "Python") (c.AsPython "") endCode endFrame
       | FSharpCodeBlock (ts, c) ->
           let textSize = ts.ToString()
-          sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToFSharp "") endCode endFrame
+          sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToFSharp PrintTypes.Untyped "") endCode endFrame
       | LambdaCodeBlock (ts, c) ->
           let textSize = ts.ToString()
-          sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToLambda) endCode endFrame
+          sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToLambda PrintTypes.Untyped) endCode endFrame
       | CSharpCodeBlock (ts,c) ->
           let textSize = ts.ToString()
           (sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s" beginFrame textSize (beginCode "[Sharp]C")  (c.AsCSharp "") endCode endFrame) + "\n\n" +
@@ -226,18 +226,18 @@ type LatexElement =
             let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s %s%s\\%s%s%s%s" beginFrame textSize (beginCode "[Sharp]C") ps endCode textSize stackLabel stack heap input output endFrame
             yield slide ]
         stackTraceTables |> List.fold (+) ""
-      | LambdaStateTrace(ts,term,maxSteps,showArithmetics,showControlFlow,showLet,showPairs,showUnions) ->
+      | LambdaStateTrace(ts,term,maxSteps,expandInsideLambda,showArithmetics,showControlFlow,showLet,showPairs,showUnions) ->
         let textSize = ts.ToString()
         let states = 
           match maxSteps with
           | Some maxSteps ->
-            (id,term) :: runToEnd (BetaReduction.reduce maxSteps showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
+            (id,term) :: runToEnd (BetaReduction.reduce maxSteps expandInsideLambda showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
           | _ ->
-            (id,term) :: runToEnd (BetaReduction.reduce System.Int32.MaxValue showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
+            (id,term) :: runToEnd (BetaReduction.reduce System.Int32.MaxValue expandInsideLambda showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
         let terms = states |> List.map (fun (k,t) -> k t)
         let stackTraceTables = 
           [ for term,term' in Seq.zip terms (terms.Tail) do 
-              let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s\pause%s%s%s%s" beginFrame textSize (beginCode "ML") (term.ToLambda) endCode (beginCode "ML") (term'.ToLambda) endCode endFrame
+              let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s\pause%s%s%s%s" beginFrame textSize (beginCode "ML") (term.ToLambda PrintTypes.Untyped) endCode (beginCode "ML") (term'.ToLambda PrintTypes.Untyped) endCode endFrame
               yield slide ]
         let res = stackTraceTables |> List.fold (+) ""
         res

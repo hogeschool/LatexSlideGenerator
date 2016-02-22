@@ -204,6 +204,8 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
           return BoolType
         | _ -> 
           return failwithf "Cannot perform %s %s %s" (toString a) op.AsPython (toString b)
+      | _ -> 
+        return failwithf "Invalid operation %s %s %s" (toString a) op.AsPython (toString b)
     | InterfaceDef (n,ms) as intf ->
       let! pc = getPC
       let msValsByName = 

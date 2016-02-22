@@ -175,6 +175,7 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
         | Minus -> return ConstInt(x - y)
         | DividedBy -> return ConstInt(x / y)
         | GreaterThan -> return ConstBool(x > y)
+        | Equals -> return ConstBool(x = y)
       | ConstString x, ConstString y -> 
         match op with
         | Plus -> return ConstString(x + y)
