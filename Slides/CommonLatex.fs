@@ -29,3 +29,24 @@ type TextSize = ScriptSize | FootnoteSize | Tiny | Small | Normal | Large
       | Small -> @"\small"
       | Normal -> @"\normal"
       | Large -> @"\large"
+
+let toGreekLetter s =
+  match s with
+  | "a" -> @"$\alpha$"
+  | "b" -> @"$\beta$"
+  | "c" -> @"$\gamma"
+  | "d" -> @"$\delta$"
+  | "e" -> @"$\epsilon$"
+
+  | "h" -> @"$\theta$"
+  | "i" -> @"$\iota$"
+
+  | "k" -> @"$\kappa$"
+
+  | "r" -> @"$\rho$"
+  | "s" -> @"$\sigma$"
+
+  | "t" -> @"$\tau"
+
+  | "z" -> @"$\zeta"
+  | _ -> s

@@ -14,6 +14,30 @@ type Type =
   | Nat
   | Product
   | Sum
+  with 
+    member this.ToLambda =
+      match this with
+      | Var s -> toGreekLetter s
+      | Arrow(t,u) ->
+        sprintf @"(%s$\rightarrow$%s)" (t.ToLambda) (u.ToLambda)
+      | Forall(a,u) ->
+        sprintf @"$(\forall$%s$\Rightarrow$%s)" (toGreekLetter a) (u.ToLambda)
+      | Mu(a,u) ->
+        sprintf @"$(\mu%s$\Rightarrow$%s)" (toGreekLetter a) (u.ToLambda)
+      | Application(Application(Product,t),u) ->
+        sprintf @"(%s$\times$%s)" (t.ToLambda) (u.ToLambda)
+      | Application(Application(Sum,t),u) ->
+        sprintf @"(%s+%s)" (t.ToLambda) (u.ToLambda)
+      | Application(t,u) ->
+        sprintf @"(%s %s)" (t.ToLambda) (u.ToLambda)
+      | Boolean ->
+        "Boolean"
+      | Nat ->
+        "Nat"
+      | Product ->
+        @"$\times$"
+      | Sum ->
+        @"+"
 
 type Term =
   | Var of string
@@ -58,7 +82,8 @@ type Term =
     member this.ToLambdaInner (printTypes:PrintTypes) =
       let (!) = printTypes.PrintVar
       match this with
-      | TypeLambda(x,t) -> t.ToLambdaInner printTypes
+      | TypeLambda(a,t) -> 
+        sprintf @"$\rightarrow$%s" (printTypes.PrintTypeLambda a (t.ToLambda printTypes))
       | Lambda(x,t) -> sprintf @" %s%s" !x (t.ToLambdaInner printTypes)
       | Highlighted(Lambda(x,t)) ->
         sprintf @"(*@\underline{%s}@*)%s" !x ((Highlighted t).ToLambdaInner printTypes)
@@ -239,6 +264,12 @@ and PrintTypes =
         PrintVar = fst
         PrintTypeLambda = (fun a t -> t)
         PrintTypeApplication = (fun t a -> t)
+      }
+    static member TypedLambda =
+      {
+        PrintVar = (fun (x,t) -> sprintf "(%s:%s)" x (t.ToLambda))
+        PrintTypeLambda = (fun a t -> sprintf @"($\Lambda$%s$\Rightarrow$%s)" (toGreekLetter a) t)
+        PrintTypeApplication = (fun t a -> sprintf "(%s %s)" t (a.ToLambda))
       }
 
 let (!!) x = Var x
