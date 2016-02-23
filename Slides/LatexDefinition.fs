@@ -21,7 +21,6 @@ type LatexElement =
   | Items of List<LatexElement>
   | PythonCodeBlock of TextSize * Code
   | LambdaCodeBlock of TextSize * Term * showTypes:bool
-  | LambdaTypeBlock of TextSize * Type
   | FSharpCodeBlock of TextSize * Term
   | CSharpCodeBlock of TextSize * Code
   | Unrepeated of LatexElement
@@ -35,6 +34,7 @@ type LatexElement =
   | CSharpStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpTypeTrace of TextSize * Code * TypeCheckingState<Code>
   | LambdaStateTrace of textSize:TextSize * term:Term * maxSteps:Option<int> * expandInsideLambda:bool * showArithmetics:bool * showControlFlow:bool * showLet:bool * showPairs:bool * showUnions:bool
+  | LambdaTypeTrace of textSize:TextSize * term:Term
   with
     member this.ToDocumentString() = 
       match this with
@@ -83,9 +83,6 @@ type LatexElement =
       | LambdaCodeBlock(ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (c.ToLambda (if showTypes then PrintTypes.TypedLambda else PrintTypes.Untyped)) endCode
-      | LambdaTypeBlock(ts, t) ->
-          let textSize = ts.ToString()
-          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (t.ToLambda) endCode
       | Unrepeated s ->
         s.ToDocumentString()
       | CSharpCodeBlock (ts,c) ->
@@ -127,9 +124,6 @@ type LatexElement =
       | LambdaCodeBlock(ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToLambda (if showTypes then PrintTypes.TypedLambda else PrintTypes.Untyped)) endCode, []
-      | LambdaTypeBlock(ts, t) ->
-          let textSize = ts.ToString()
-          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (t.ToLambda) endCode, []
       | Unrepeated s ->
         s.ToStringAsElement() |> fst,[]
       | CSharpCodeBlock (ts,c) ->
@@ -181,9 +175,6 @@ type LatexElement =
       | LambdaCodeBlock (ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToLambda (if showTypes then PrintTypes.TypedLambda else PrintTypes.Untyped)) endCode endFrame
-      | LambdaTypeBlock (ts, t) ->
-          let textSize = ts.ToString()
-          sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (t.ToLambda) endCode endFrame
       | CSharpCodeBlock (ts,c) ->
           let textSize = ts.ToString()
           (sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s" beginFrame textSize (beginCode "[Sharp]C")  (c.AsCSharp "") endCode endFrame) + "\n\n" +
@@ -248,6 +239,17 @@ type LatexElement =
         let stackTraceTables = 
           [ for term,term' in Seq.zip terms (terms.Tail) do 
               let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s\pause%s%s%s%s" beginFrame textSize (beginCode "ML") (term.ToLambda PrintTypes.Untyped) endCode (beginCode "ML") (term'.ToLambda PrintTypes.Untyped) endCode endFrame
+              yield slide ]
+        let res = stackTraceTables |> List.fold (+) ""
+        res
+      | LambdaTypeTrace(ts,term) ->
+        let textSize = ts.ToString()
+        let states = 
+            (id,term) :: runToEnd (TypeCheckingReduction.reduce pause) (id,term)
+        let terms = states |> List.map (fun (k,t) -> k t)
+        let stackTraceTables = 
+          [ for term,term' in Seq.zip terms (terms.Tail) do 
+              let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s\pause%s%s%s%s" beginFrame textSize (beginCode "ML") (term.ToLambda PrintTypes.TypedLambda) endCode (beginCode "ML") (term'.ToLambda PrintTypes.TypedLambda) endCode endFrame
               yield slide ]
         let res = stackTraceTables |> List.fold (+) ""
         res

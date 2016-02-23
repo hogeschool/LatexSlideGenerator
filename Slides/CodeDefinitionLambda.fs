@@ -15,15 +15,45 @@ type Type =
   | Product
   | Sum
   with 
+    member this.Length = 
+      match this with
+      | Arrow(t,u) -> t.Length + u.Length
+      | Forall(x,t) -> 1 + t.Length
+      | Mu(x,t) -> 1 + t.Length
+      | Application(t,u) -> t.Length + u.Length
+      | _ -> 1
+    member t.replace (x:string) (u:Type) : Type =
+      match t with
+      | Var s when s = x -> u
+      | Forall(v,f) when v <> x -> Forall(v, f.replace x u)
+      | Application(t,f) -> 
+        Application(t.replace x u,f.replace x u)
+      | Arrow(t,f) -> 
+        Arrow(t.replace x u,f.replace x u)
+      | _ -> t
+    member this.ToLambdaForallInner =
+      match this with
+      | Forall(a,u) ->
+        sprintf @" %s%s)" (toGreekLetter a) (u.ToLambdaForallInner)
+      | t -> 
+        sprintf @" $\Rightarrow$%s)" (t.ToLambda)
+    member this.ToLambdaInner =
+      match this with
+      | Arrow(t,u) ->
+        sprintf @"%s$\rightarrow$%s" (t.ToLambda) (u.ToLambdaInner)
+      | t -> 
+        t.ToLambda
+      
+    member this.ToLambdaMuInner = this.ToLambda
     member this.ToLambda =
       match this with
       | Var s -> toGreekLetter s
       | Arrow(t,u) ->
-        sprintf @"(%s$\rightarrow$%s)" (t.ToLambda) (u.ToLambda)
+        sprintf @"(%s$\rightarrow$%s)" (t.ToLambda) (u.ToLambdaInner)
       | Forall(a,u) ->
-        sprintf @"$(\forall$%s$\Rightarrow$%s)" (toGreekLetter a) (u.ToLambda)
+        sprintf @"($\forall$%s%s" (toGreekLetter a) (u.ToLambdaForallInner)
       | Mu(a,u) ->
-        sprintf @"$(\mu%s$\Rightarrow$%s)" (toGreekLetter a) (u.ToLambda)
+        sprintf @"($\mu$%s$\Rightarrow$%s)" (toGreekLetter a) (u.ToLambdaMuInner)
       | Application(Application(Product,t),u) ->
         sprintf @"(%s$\times$%s)" (t.ToLambda) (u.ToLambda)
       | Application(Application(Sum,t),u) ->
@@ -40,6 +70,7 @@ type Type =
         @"+"
 
 type Term =
+  | Type of Type
   | Var of string
   | Application of Term * Term
   | Lambda of (string * Type) * Term
@@ -78,12 +109,24 @@ type Term =
       | TypeLambda(a,t) -> 
         t.replace x u
       | _ -> t
+    member t.typeReplace (x:string) (u:Term) : Term =
+      match t with
+      | Var s when s = x -> u
+      | Lambda((v,t_v),f) when v <> x -> Lambda((v,t_v), f.typeReplace x u)
+      | Application(t,f) -> 
+        Application(t.typeReplace x u,f.typeReplace x u)
+      | Let((v,t_v),t,rest) when v <> x -> Let((v,t_v),t.typeReplace x u,rest.typeReplace x u)
+      | TypeApplication(t,a) -> 
+        TypeApplication(t.typeReplace x u,a)
+      | TypeLambda(a,t) when x <> a -> 
+        TypeLambda(a,t.typeReplace x u)
+      | _ -> t
 
     member this.ToLambdaInner (printTypes:PrintTypes) =
       let (!) = printTypes.PrintVar
       match this with
       | TypeLambda(a,t) -> 
-        sprintf @"$\rightarrow$%s" (printTypes.PrintTypeLambda a (t.ToLambda printTypes))
+        sprintf @"$\rightarrow$%s %s" (printTypes.PrintTypeLambda a) (t.ToLambda printTypes)
       | Lambda(x,t) -> sprintf @" %s%s" !x (t.ToLambdaInner printTypes)
       | Highlighted(Lambda(x,t)) ->
         sprintf @"(*@\underline{%s}@*)%s" !x ((Highlighted t).ToLambdaInner printTypes)
@@ -93,14 +136,19 @@ type Term =
       | Highlighted t -> t.Length
       | Application(t,u) -> t.Length + u.Length
       | Lambda(x,t) -> 1 + t.Length
+      | TypeLambda(x,t) -> 1 + t.Length
+      | TypeApplication(t,u) -> t.Length + u.Length
+      | Type(t) -> 1 + t.Length
       | _ -> 1
 
     member this.ToLambda (printTypes:PrintTypes) =
       match this with
+      | Type t -> 
+        printTypes.PrintType t
       | TypeApplication(t,a) ->
         printTypes.PrintTypeApplication (t.ToLambda printTypes) a
       | TypeLambda(a,t) ->
-        printTypes.PrintTypeLambda a (t.ToLambda printTypes)
+        sprintf "%s%s" (printTypes.PrintTypeLambda a) (t.ToLambda printTypes)
       | Var s -> s
       | Hidden t -> sprintf @"..."
       | Highlighted t -> 
@@ -120,6 +168,8 @@ type Term =
             Application(Highlighted(t),Highlighted(u)).ToLambda printTypes
           | Lambda(x,t) -> 
             sprintf @"(*@\underline{$\lambda$%s$\rightarrow$}@*) %s" (printTypes.PrintVar x) ((Highlighted t).ToLambdaInner printTypes)
+          | TypeLambda(a,t) -> 
+            sprintf @"(*@\underline{%s}@*) %s" (printTypes.PrintTypeLambda a) (Highlighted(t).ToLambda printTypes)
           | t -> 
             t.ToLambda printTypes
       | Application(Application(And,t),u) -> sprintf @"(%s $\wedge$ %s)" (t.ToLambda printTypes) (u.ToLambda printTypes)
@@ -152,10 +202,12 @@ type Term =
       | Inr -> sprintf @"inr"
     member this.ToString (printTypes:PrintTypes) =
       match this with
+      | Type t -> 
+        printTypes.PrintType t
       | TypeApplication(t,a) ->
         printTypes.PrintTypeApplication (t.ToString printTypes) a
       | TypeLambda(a,t) ->
-        printTypes.PrintTypeLambda a (t.ToString printTypes)
+        sprintf "%s%s" (printTypes.PrintTypeLambda a) (t.ToString printTypes)
       | Var s -> s
       | Hidden t -> sprintf @"..."
       | Highlighted t -> t.ToString printTypes
@@ -198,10 +250,12 @@ type Term =
         sprintf "-> %s%s" nl (this.ToFSharp printTypes pre)
     member this.ToFSharp (printTypes:PrintTypes) pre =
       match this with
+      | Type t -> 
+        printTypes.PrintType t
       | TypeApplication(t,a) ->
         sprintf "%s%s" pre (printTypes.PrintTypeApplication (t.ToFSharp printTypes "") a)
       | TypeLambda(a,t) ->
-        sprintf "%s%s" pre (printTypes.PrintTypeLambda a (t.ToFSharp printTypes ""))
+        sprintf "%s%s%s" pre (printTypes.PrintTypeLambda a) (t.ToFSharp printTypes "")
       | Var s -> pre + s
       | Hidden t -> sprintf @"..."
       | Highlighted t -> t.ToFSharp printTypes pre
@@ -256,19 +310,22 @@ type Term =
 
 and PrintTypes =
   { PrintVar : (string * Type) -> string;
-    PrintTypeLambda : string -> string -> string;
+    PrintType : Type -> string;
+    PrintTypeLambda : string -> string;
     PrintTypeApplication : string -> Type -> string }
   with 
     static member Untyped =
       {
         PrintVar = fst
-        PrintTypeLambda = (fun a t -> t)
+        PrintType = (fun _ -> "")
+        PrintTypeLambda = (fun a -> "")
         PrintTypeApplication = (fun t a -> t)
       }
     static member TypedLambda =
       {
         PrintVar = (fun (x,t) -> sprintf "(%s:%s)" x (t.ToLambda))
-        PrintTypeLambda = (fun a t -> sprintf @"($\Lambda$%s$\Rightarrow$%s)" (toGreekLetter a) t)
+        PrintType = (fun t -> t.ToLambda)
+        PrintTypeLambda = (fun a -> sprintf @"$\Lambda$%s$\Rightarrow$" (toGreekLetter a))
         PrintTypeApplication = (fun t a -> sprintf "(%s %s)" t (a.ToLambda))
       }
 
@@ -283,13 +340,13 @@ let (>>>) t u = Type.Application(t,u)
 let (-->) t u = Type.Arrow(t,u)
 
 
-let defaultTypes =
+let invDefaultTypes,defaultTypes =
   [
     Boolean, Forall("a", !!!"a" --> (!!!"a" --> !!!"a"))
     Nat, Forall("a", (!!!"a" --> !!!"a") --> (!!!"a" --> !!!"a"))
     Type.Product, Forall("a", Forall("b", Forall("c", !!!"a" --> (!!!"b" --> !!!"c"))))
     Type.Sum, Forall("a", Forall("b", Forall("c", (!!!"a" --> !!!"c") --> ((!!!"b" --> !!!"c") --> !!!"c"))))
-  ] |> Map.ofList
+  ] |> (fun l -> l |> List.map (fun (x,y) -> y,x) |> Map.ofList, l |> Map.ofList)
 
 let invDefaultTerms, defaultTerms =
   [

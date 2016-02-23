@@ -34,7 +34,7 @@ let toGreekLetter s =
   match s with
   | "a" -> @"$\alpha$"
   | "b" -> @"$\beta$"
-  | "c" -> @"$\gamma"
+  | "c" -> @"$\gamma$"
   | "d" -> @"$\delta$"
   | "e" -> @"$\epsilon$"
 
