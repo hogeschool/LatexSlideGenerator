@@ -57,8 +57,8 @@
     <Compile Include="CodeDefinitionLambda.fs" />
     <Compile Include="Interpreter.fs" />
     <Compile Include="BetaReduction.fs" />
-    <Compile Include="TypeCheckingReduction.fs" />
     <Compile Include="TypeChecker.fs" />
+    <Compile Include="TypeCheckingReduction.fs" />
     <Compile Include="LatexDefinition.fs" />
     <Compile Include="Working together as teachers.fs" />
     <Compile Include="Compile.fs" />
