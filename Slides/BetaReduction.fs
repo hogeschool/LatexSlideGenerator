@@ -47,7 +47,7 @@ let rec reduce maxSteps expandInsideLambda showArithmetics showControlFlow showL
             return! on_lambda x f
           | Application(Lambda(x,f),u) ->
               do! setState ((fun u -> k(Application(Lambda(x,f),u))), u)
-              let! replaced = reduce (maxSteps - 1) on_lambda p
+              let! replaced = reduce_step on_lambda p
               let! (k1,v) = getState
               do! setState ((fun v -> k(Highlighted(Application(Lambda(x,f),v),Underlined))), v)
               do! p
@@ -225,7 +225,7 @@ let rec reduce maxSteps expandInsideLambda showArithmetics showControlFlow showL
             return false
           | Let(x,t,u) as l when not showLet ->
             do! setState ((fun t -> k(Let(x,t,u))), t)
-            let! replacedT = reduce (maxSteps-1) on_lambda p
+            let! replacedT = reduce_step on_lambda p
             let! (k1,t_new) = getState
             //do! if not replacedT then setState ((fun t -> k(Highlighted(Let(x,t,u),Underlined))), t_new) >> p else ret ()
             let u_new = replace u (fst x) (Highlighted(t_new,Colored))
@@ -259,13 +259,17 @@ let rec reduce maxSteps expandInsideLambda showArithmetics showControlFlow showL
           | TypeLambda(a,t) ->
             do! setState (k, t)
             let! replacedT = reduce_step on_lambda p
+            //let! replacedT = reduce (maxSteps - 1) on_lambda p
             let! (k1,t_new) = getState
+            //do! setState (k,TypeLambda(a,t_new))
             do! setState (k,t_new)
             return replacedT
           | TypeApplication(t,a) ->
             do! setState (k, t)
             let! replacedT = reduce_step on_lambda p
+            //let! replacedT = reduce (maxSteps - 1) on_lambda p
             let! (k1,t_new) = getState
+            //do! setState (k,TypeApplication(t_new,a))
             do! setState (k,t_new)
             return replacedT
           | Application(t,u) ->
@@ -322,7 +326,18 @@ let rec reduce maxSteps expandInsideLambda showArithmetics showControlFlow showL
             do! p
             return false
           | _ ->
-            return false
+            let t_untyped = t.Untyped
+            match inverseDeltaRules t_untyped with
+            | Some t' ->
+              do! setState (k, Highlighted(t,Underlined))
+              do! p
+              do! setState (k, Highlighted(t',Colored))
+              do! p
+              do! setState (k, t')
+              do! p
+              return false
+            | _ ->
+              return false
     }
   reduce maxSteps (fun _ _ -> ret false) p
 

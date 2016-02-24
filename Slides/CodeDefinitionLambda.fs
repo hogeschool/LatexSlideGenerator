@@ -97,6 +97,24 @@ type Term =
   | Inr
   | Match
   with
+    member t.Untyped =
+      match t with
+      | TypeApplication(t,a) ->
+        t.Untyped
+      | TypeLambda(a,t) ->
+        t.Untyped
+      | Hidden t -> 
+        Hidden(t.Untyped)
+      | Highlighted(t,h) -> 
+        Highlighted(t.Untyped,h)
+      | Application(t,u) -> 
+        Application(t.Untyped,u.Untyped)
+      | Lambda((x,t_x),t) -> 
+        Lambda((x,Type.Var("")),t.Untyped)
+      | Let((x,t_x),_expr,_in) ->
+        Let((x,Type.Var""),_expr.Untyped,_in.Untyped)
+      | t -> t
+      
     member t.replace (x:string) (u:Term) : Term =
       match t with
       | Var s when s = x -> u
@@ -353,31 +371,55 @@ let invDefaultTypes,defaultTypes =
   ] |> (fun l -> l |> List.map (fun (x,y) -> y,x) |> Map.ofList, l |> Map.ofList)
 
 let invDefaultTerms, defaultTerms =
-  [
-    True, ("a" >=> (("t",!!!"a") ==> (("f",!!!"a") ==> (!!"t"))))
-    False, ("a" >=> (("t",!!!"a") ==> (("f",!!!"a") ==> (!!"f"))))
-    And, ((("p",Boolean) ==> (("q",Boolean) ==> (((!!"p" >>= Boolean) >> !!"q") >> !!"p"))))
-    Or, ((("p",Boolean) ==> (("q",Boolean) ==> (((!!"p" >>= Boolean) >> !!"p") >> !!"q"))))
-    If, (("b" >=> (("p",Boolean) ==> (("th",!!!"b") ==> (("el",!!!"b") ==> ((!!"p" >>= !!!"b") >> !!"th" >> !!"el"))))))
+  let inverse,forward = 
+    [
+      True, ("a" >=> (("t",!!!"a") ==> (("f",!!!"a") ==> (!!"t"))))
+      False, ("a" >=> (("t",!!!"a") ==> (("f",!!!"a") ==> (!!"f"))))
+      And, ((("p",Boolean) ==> (("q",Boolean) ==> (((!!"p" >>= Boolean) >> !!"q") >> !!"p"))))
+      Or, ((("p",Boolean) ==> (("q",Boolean) ==> (((!!"p" >>= Boolean) >> !!"p") >> !!"q"))))
+      If, (("b" >=> (("p",Boolean) ==> (("th",!!!"b") ==> (("el",!!!"b") ==> ((!!"p" >>= !!!"b") >> !!"th" >> !!"el"))))))
 
-    Plus, ((("m",Nat) ==> (("n",Nat) ==> 
-              ("a" >=> (("s",((!!!"a")-->(!!!"a"))) ==> (("z",!!!"a") ==> (((!!"m" >>= !!!"a") >> !!"s") >> (((!!"n" >>= !!!"a") >> !!"s") >> !!"z"))))))))
-    Mult, ((("m",Nat) ==> (("n",Nat) ==> 
-              ("a" >=> (("s",((!!!"a")-->(!!!"a"))) ==> (("z",!!!"a") ==> (((!!"m" >>= !!!"a") >> ((!!"n" >>= !!!"a") >> !!"s")) >> !!"z")))))))
-    IsZero, ((("m",Nat) ==> (("n",Nat) ==> 
-                (((!!"m" >>= Boolean) >> (("x",Boolean) ==> False)) >> True))))
+      Plus, ((("m",Nat) ==> (("n",Nat) ==> 
+                ("a" >=> (("s",((!!!"a")-->(!!!"a"))) ==> (("z",!!!"a") ==> (((!!"m" >>= !!!"a") >> !!"s") >> (((!!"n" >>= !!!"a") >> !!"s") >> !!"z"))))))))
+      Mult, ((("m",Nat) ==> (("n",Nat) ==> 
+                ("a" >=> (("s",((!!!"a")-->(!!!"a"))) ==> (("z",!!!"a") ==> (((!!"m" >>= !!!"a") >> ((!!"n" >>= !!!"a") >> !!"s")) >> !!"z")))))))
+      IsZero, ((("m",Nat) ==> (("n",Nat) ==> 
+                  (((!!"m" >>= Boolean) >> (("x",Boolean) ==> False)) >> True))))
 
-    Fix, ("a" >=> (("f",!!!"a" --> !!!"a") ==> ((-"x" ==> (!!"f" >> (!!"x" >> !!"x"))) >> (-"x" ==> (!!"f" >> (!!"x" >> !!"x"))))))
-    MakePair, ("a" >=> ("b" >=> (("x",!!!"a") ==> (("y",!!!"b") ==> ("c" >=> (("f",(!!!"a" --> (!!!"b" --> !!!"c"))) ==> ((!!"f" >> !!"x") >> !!"y")))))))
-    First, ("a" >=> ("b" >=> (("p",((Type.Product >>> !!!"a") >>> !!!"b")) ==> ((!!"p" >>= !!!"a") >> (("x",!!!"a") ==> (("y",!!!"a") ==> (!!"x")))))))
-    Second, ("a" >=> ("b" >=> (("p",((Type.Product >>> !!!"a") >>> !!!"b")) ==> ((!!"p" >>= !!!"a") >> (("x",!!!"a") ==> (("y",!!!"a") ==> (!!"y")))))))
+      Fix, ("a" >=> (("f",!!!"a" --> !!!"a") ==> ((-"x" ==> (!!"f" >> (!!"x" >> !!"x"))) >> (-"x" ==> (!!"f" >> (!!"x" >> !!"x"))))))
+      MakePair, ("a" >=> ("b" >=> (("x",!!!"a") ==> (("y",!!!"b") ==> ("c" >=> (("f",(!!!"a" --> (!!!"b" --> !!!"c"))) ==> ((!!"f" >> !!"x") >> !!"y")))))))
+      First, ("a" >=> ("b" >=> (("p",((Type.Product >>> !!!"a") >>> !!!"b")) ==> ((!!"p" >>= !!!"a") >> (("x",!!!"a") ==> (("y",!!!"a") ==> (!!"x")))))))
+      Second, ("a" >=> ("b" >=> (("p",((Type.Product >>> !!!"a") >>> !!!"b")) ==> ((!!"p" >>= !!!"a") >> (("x",!!!"a") ==> (("y",!!!"a") ==> (!!"y")))))))
 
-    Inl, ("a" >=> ("b" >=> (("x",!!!"a") ==> ("c" >=> (("f",(!!!"a" --> !!!"c")) ==> (("g",(!!!"b" --> !!!"c")) ==> (!!"f" >> !!"x")))))))
-    Inr, ("a" >=> ("b" >=> (("y",!!!"b") ==> ("c" >=> (("f",(!!!"a" --> !!!"c")) ==> (("g",(!!!"b" --> !!!"c")) ==> (!!"g" >> !!"y")))))))
-    Match, ("a" >=> ("b" >=> 
-                  (("u",(Type.Sum >>> !!!"a") >>> !!!"b") ==> 
-                        ("c" >=> (("f",(!!!"a" --> !!!"c")) ==> (("g",(!!!"b" --> !!!"c")) ==> (((!!"u" >>= !!!"c") >> !!"f") >> !!"g")))))))
-  ] |> (fun l -> l |> List.map (fun (x,y) -> y,x) |> Map.ofList, l |> Map.ofList)
+      Inl, ("a" >=> ("b" >=> (("x",!!!"a") ==> ("c" >=> (("f",(!!!"a" --> !!!"c")) ==> (("g",(!!!"b" --> !!!"c")) ==> (!!"f" >> !!"x")))))))
+      Inr, ("a" >=> ("b" >=> (("y",!!!"b") ==> ("c" >=> (("f",(!!!"a" --> !!!"c")) ==> (("g",(!!!"b" --> !!!"c")) ==> (!!"g" >> !!"y")))))))
+      Match, ("a" >=> ("b" >=> 
+                    (("u",(Type.Sum >>> !!!"a") >>> !!!"b") ==> 
+                          ("c" >=> (("f",(!!!"a" --> !!!"c")) ==> (("g",(!!!"b" --> !!!"c")) ==> (((!!"u" >>= !!!"c") >> !!"f") >> !!"g")))))))
+    ] |> (fun l -> l |> List.map (fun (x,y) -> y,x),l)
+  let inverse = 
+    inverse @
+      [
+        True, (-"t" ==> (-"f" ==> (!!"t")))
+        False, (-"t" ==> (-"f" ==> (!!"f")))
+        And, (-"p" ==> (-"q" ==> (!!"p" >> !!"q" >> !!"p")))
+        Or, (-"p" ==> (-"q" ==> (!!"p" >> !!"p" >> !!"q")))
+        If, (-"p" ==> (-"th" ==> (-"el" ==> (!!"p" >> !!"th" >> !!"el"))))
+
+        Plus, (-"m" ==> (-"n" ==> (-"s" ==> (-"z" ==> ((!!"m" >> !!"s") >> ((!!"n" >> !!"s") >> !!"z"))))))
+        Mult, (-"m" ==> (-"n" ==> (-"s" ==> (-"z" ==> ((!!"m" >> (!!"n" >> !!"s")) >> !!"z")))))
+        IsZero, (-"m" ==> ((!!"m" >> (-"x" ==> False)) >> True))
+
+        Fix, (-"f" ==> ((-"x" ==> (!!"f" >> (!!"x" >> !!"x"))) >> (-"x" ==> (!!"f" >> (!!"x" >> !!"x")))))
+        MakePair, (-"x" ==> (-"y" ==> (-"f" ==> ((!!"f" >> !!"x") >> !!"y"))))
+        First, (-"p" ==> (!!"p" >> (-"x" ==> (-"y" ==> (!!"x")))))
+        Second, (-"p" ==> (!!"p" >> (-"x" ==> (-"y" ==> (!!"y")))))
+
+        Inl, (-"x" ==> (-"f" ==> (-"g" ==> (!!"f" >> !!"x"))))
+        Inr, (-"y" ==> (-"f" ==> (-"g" ==> (!!"g" >> !!"y"))))
+        Match, (-"u" ==> (-"f" ==> (-"g" ==> ((!!"u" >> !!"f") >> !!"g"))))
+      ] |> List.map (fun (x,y) -> y,x)
+  inverse |> Map.ofList,forward |> Map.ofList
 
 let deltaRules (t:Term) : Option<Term> =
   match defaultTerms |> Map.tryFind t with
@@ -423,5 +465,22 @@ let inverseDeltaRules (t:Term) : Option<Term> =
       match loop t with
       | Some x -> Some (Var(string x))
       | _ -> Option.None
+    | Lambda(("f",_),Lambda(("g",_),Application(Var "f", t))) ->
+      Some(Application(Inl, t))
+    | Lambda(("f",_),Lambda(("g",_),Application(Var "g", t))) ->
+      Some(Application(Inr, t))
+    | Lambda(("s",_),Lambda(("z",_),t)) ->
+      let rec loop t = 
+        match t with
+        | Var "z" -> 
+          Some(0)
+        | Application(Var "s", t') ->
+          match loop t' with
+          | Some x -> Some(x + 1)
+          | _ -> Option.None
+        | _ -> Option.None
+      match loop t with
+      | Some x -> Some (Var(string x))
+      | _ -> Option.None    
     | _ -> 
       Option.None

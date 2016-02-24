@@ -96,8 +96,34 @@ type LatexElement =
       | TypingRules tr ->
           let trs = tr |> List.map (fun t -> t.ToString())
           (List.fold (+) "" trs)
+      | LambdaStateTrace(ts,term,maxSteps,expandInsideLambda,showArithmetics,showControlFlow,showLet,showPairs,showUnions) ->
+        let textSize = ts.ToString()
+        let states = 
+          match maxSteps with
+          | Some maxSteps ->
+            (id,term) :: runToEnd (BetaReduction.reduce maxSteps expandInsideLambda showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
+          | _ ->
+            (id,term) :: runToEnd (BetaReduction.reduce System.Int32.MaxValue expandInsideLambda showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
+        let terms = states |> List.map (fun (k,t) -> k t)
+        let stackTraceTables = 
+          [ for term in terms.Head :: (terms.Tail |> skipEveryThree) do 
+              let slide = sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (term.ToLambda PrintTypes.Untyped) endCode
+              yield slide ]
+        let res = stackTraceTables |> List.fold (+) ""
+        res
+      | LambdaTypeTrace(ts,term) ->
+        let textSize = ts.ToString()
+        let states = 
+            (id,term) :: runToEnd (TypeCheckingReduction.reduce pause) (id,term)
+        let terms = states |> List.map (fun (k,t) -> k t)
+        let stackTraceTables = 
+          [ for term in terms.Head :: (terms.Tail |> skipEveryThree) do 
+              let slide = sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (term.ToLambda PrintTypes.TypedLambda) endCode
+              yield slide ]
+        let res = stackTraceTables |> List.fold (+) ""
+        res
       | VerticalStack items ->
-          let items = items |> List.map (fun item -> let i = item.ToDocumentString() in @"\item " + i + "\n")
+          let items = items |> List.map (fun item -> let i = item.ToDocumentString() in i + "\n")
           let allItems = items |> List.map (fun i -> i + " \n") |> List.fold (+) ""
           allItems
       | _ -> ""
