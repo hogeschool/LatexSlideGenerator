@@ -88,7 +88,7 @@ type Term =
   | IsZero
   | If
   | Fix
-  | Highlighted of Term
+  | Highlighted of Term * highlightType:HighlightType
   | Hidden of Term
   | MakePair
   | First
@@ -128,12 +128,14 @@ type Term =
       | TypeLambda(a,t) -> 
         sprintf @"$\rightarrow$%s %s" (printTypes.PrintTypeLambda a) (t.ToLambda printTypes)
       | Lambda(x,t) -> sprintf @" %s%s" !x (t.ToLambdaInner printTypes)
-      | Highlighted(Lambda(x,t)) ->
-        sprintf @"(*@\underline{%s}@*)%s" !x ((Highlighted t).ToLambdaInner printTypes)
+      | Highlighted(Lambda(x,t),Underlined) ->
+        sprintf @"(*@\underline{%s}@*)%s" !x ((Highlighted(t,Underlined)).ToLambdaInner printTypes)
+      | Highlighted(Lambda(x,t),Colored) ->
+        sprintf @"(*@\colorbox{yellow}{%s}@*)%s" !x ((Highlighted(t,Colored)).ToLambdaInner printTypes)
       | _ -> sprintf @"$\rightarrow$%s" (this.ToLambda printTypes)
     member this.Length = 
       match this with
-      | Highlighted t -> t.Length
+      | Highlighted(t,_) -> t.Length
       | Application(t,u) -> t.Length + u.Length
       | Lambda(x,t) -> 1 + t.Length
       | TypeLambda(x,t) -> 1 + t.Length
@@ -151,7 +153,9 @@ type Term =
         sprintf "%s%s" (printTypes.PrintTypeLambda a) (t.ToLambda printTypes)
       | Var s -> s
       | Hidden t -> sprintf @"..."
-      | Highlighted t -> 
+      | Highlighted(t,Colored) -> 
+        sprintf @"(*@\colorbox{yellow}{%s}@*)" (t.ToLambda printTypes)
+      | Highlighted(t,Underlined) -> 
         if t.Length <= 10 then
           sprintf @"(*@\underline{%s}@*)" (t.ToLambda printTypes)
         else
@@ -163,13 +167,13 @@ type Term =
 //          | Application(Application(Mult,t),u) -> sprintf @"(%s $\times$ %s)" (t.ToLambda) (u.ToLambda)
 //          | Application(IsZero,t) -> sprintf @"(%s $=$ 0)" (t.ToLambda)
           | Application(Application(Application(If,c),t),e) -> 
-            Application(Application(Application(If,Highlighted(c)),Highlighted(t)),Highlighted(e)).ToLambda printTypes
+            Application(Application(Application(If,Highlighted(c,Underlined)),Highlighted(t,Underlined)),Highlighted(e,Underlined)).ToLambda printTypes
           | Application(t,u) ->
-            Application(Highlighted(t),Highlighted(u)).ToLambda printTypes
+            Application(Highlighted(t,Underlined),Highlighted(u,Underlined)).ToLambda printTypes
           | Lambda(x,t) -> 
-            sprintf @"(*@\underline{$\lambda$%s$\rightarrow$}@*) %s" (printTypes.PrintVar x) ((Highlighted t).ToLambdaInner printTypes)
+            sprintf @"(*@\underline{$\lambda$%s$\rightarrow$}@*) %s" (printTypes.PrintVar x) ((Highlighted(t,Underlined)).ToLambdaInner printTypes)
           | TypeLambda(a,t) -> 
-            sprintf @"(*@\underline{%s}@*) %s" (printTypes.PrintTypeLambda a) (Highlighted(t).ToLambda printTypes)
+            sprintf @"(*@\underline{%s}@*) %s" (printTypes.PrintTypeLambda a) (Highlighted(t,Underlined).ToLambda printTypes)
           | t -> 
             t.ToLambda printTypes
       | Application(Application(And,t),u) -> sprintf @"(%s $\wedge$ %s)" (t.ToLambda printTypes) (u.ToLambda printTypes)
@@ -210,7 +214,7 @@ type Term =
         sprintf "%s%s" (printTypes.PrintTypeLambda a) (t.ToString printTypes)
       | Var s -> s
       | Hidden t -> sprintf @"..."
-      | Highlighted t -> t.ToString printTypes
+      | Highlighted(t,_) -> t.ToString printTypes
       | Application(Application(And,t),u) -> sprintf "(%s AND %s)" (t.ToString printTypes) (u.ToString printTypes)
       | Application(Application(Or,t),u) -> sprintf "(%s OR %s)" (t.ToString printTypes) (u.ToString printTypes)
       | Application(Application(Plus,t),u) -> sprintf "(%s + %s)" (t.ToString printTypes) (u.ToString printTypes)
@@ -243,7 +247,7 @@ type Term =
       match this with
       | TypeLambda(x,t) -> t.ToFSharpInner newLine printTypes pre
       | Lambda(x,t) -> sprintf @"%s %s" (printTypes.PrintVar x) (t.ToFSharpInner newLine printTypes pre)
-      | Highlighted(Lambda(x,t)) ->
+      | Highlighted(Lambda(x,t),_) ->
         Lambda(x,t).ToFSharpInner newLine printTypes pre
       | _ -> 
         let nl,pre = newLine (pre + "  ")
@@ -258,7 +262,7 @@ type Term =
         sprintf "%s%s%s" pre (printTypes.PrintTypeLambda a) (t.ToFSharp printTypes "")
       | Var s -> pre + s
       | Hidden t -> sprintf @"..."
-      | Highlighted t -> t.ToFSharp printTypes pre
+      | Highlighted(t,_) -> t.ToFSharp printTypes pre
       | Application(Application(And,t),u) -> sprintf "%s(%s && %s)" pre (t.ToFSharp printTypes "") (u.ToFSharp printTypes "")
       | Application(Application(Or,t),u) -> sprintf "%s(%s || %s)" pre (t.ToFSharp printTypes "") (u.ToFSharp printTypes "")
       | Application(Application(Plus,t),u) -> sprintf "%s(%s + %s)" pre (t.ToFSharp printTypes "") (u.ToFSharp printTypes "")

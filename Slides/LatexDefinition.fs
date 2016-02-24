@@ -8,6 +8,11 @@ open Runtime
 open TypeChecker
 open Interpreter
 
+let rec skipEveryThree =
+  function 
+  | x::y::z::xs -> x :: y :: skipEveryThree (xs)
+  | l -> l
+
 type LatexElement = 
   | Section of string 
   | Advanced of LatexElement
@@ -236,8 +241,9 @@ type LatexElement =
           | _ ->
             (id,term) :: runToEnd (BetaReduction.reduce System.Int32.MaxValue expandInsideLambda showArithmetics showControlFlow showLet showPairs showUnions pause) (id,term)
         let terms = states |> List.map (fun (k,t) -> k t)
+        let frames = Seq.zip terms (terms.Tail) |> Seq.toList |> skipEveryThree
         let stackTraceTables = 
-          [ for term,term' in Seq.zip terms (terms.Tail) do 
+          [ for term,term' in frames do 
               let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s\pause%s%s%s%s" beginFrame textSize (beginCode "ML") (term.ToLambda PrintTypes.Untyped) endCode (beginCode "ML") (term'.ToLambda PrintTypes.Untyped) endCode endFrame
               yield slide ]
         let res = stackTraceTables |> List.fold (+) ""
@@ -247,8 +253,9 @@ type LatexElement =
         let states = 
             (id,term) :: runToEnd (TypeCheckingReduction.reduce pause) (id,term)
         let terms = states |> List.map (fun (k,t) -> k t)
+        let frames = Seq.zip terms (terms.Tail) |> Seq.toList |> skipEveryThree
         let stackTraceTables = 
-          [ for term,term' in Seq.zip terms (terms.Tail) do 
+          [ for term,term' in frames do 
               let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s\pause%s%s%s%s" beginFrame textSize (beginCode "ML") (term.ToLambda PrintTypes.TypedLambda) endCode (beginCode "ML") (term'.ToLambda PrintTypes.TypedLambda) endCode endFrame
               yield slide ]
         let res = stackTraceTables |> List.fold (+) ""

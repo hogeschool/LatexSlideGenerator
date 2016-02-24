@@ -50,3 +50,8 @@ let toGreekLetter s =
 
   | "z" -> @"$\zeta"
   | _ -> s
+
+
+type HighlightType = 
+  | Underlined
+  | Colored
