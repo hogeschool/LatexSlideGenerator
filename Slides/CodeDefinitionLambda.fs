@@ -2,9 +2,9 @@
 
 open Coroutine
 open CommonLatex
-open System.Collections.Generic
 
 type Type =
+  | Id of string
   | Var of string
   | Arrow of Type * Type
   | Forall of string * Type
@@ -12,8 +12,12 @@ type Type =
   | Application of Type * Type
   | Boolean
   | Nat
+  | String
+  | Unit
   | Product
   | Sum
+  | Record of List<string * Type>
+  | Union of List<string * List<Type>>
   with 
     member this.Length = 
       match this with
@@ -21,10 +25,14 @@ type Type =
       | Forall(x,t) -> 1 + t.Length
       | Mu(x,t) -> 1 + t.Length
       | Application(t,u) -> t.Length + u.Length
+      | Record(ls) -> 
+        1 + (ls |> List.map snd |> List.map (fun t -> t.Length) |> List.sum)
+      | Union(ls) -> 
+        1 + (ls |> List.map snd |> List.map (fun t -> t |> List.map (fun t -> t.Length) |> List.sum) |> List.sum)
       | _ -> 1
     member t.replace (x:string) (u:Type) : Type =
       match t with
-      | Var s when s = x -> u
+      | Id s | Var s when s = x -> u
       | Forall(v,f) when v <> x -> Forall(v, f.replace x u)
       | Application(t,f) -> 
         Application(t.replace x u,f.replace x u)
@@ -47,6 +55,7 @@ type Type =
     member this.ToLambdaMuInner = this.ToLambda
     member this.ToLambda =
       match this with
+      | Id s -> s
       | Var s -> toGreekLetter s
       | Arrow(t,u) ->
         sprintf @"(%s$\rightarrow$%s)" (t.ToLambda) (u.ToLambdaInner)
@@ -60,6 +69,10 @@ type Type =
         sprintf @"(%s+%s)" (t.ToLambda) (u.ToLambda)
       | Application(t,u) ->
         sprintf @"(%s %s)" (t.ToLambda) (u.ToLambda)
+      | Unit ->
+        "Unit"
+      | String ->
+        "String"
       | Boolean ->
         "Boolean"
       | Nat ->
@@ -67,7 +80,55 @@ type Type =
       | Product ->
         @"$\times$"
       | Sum ->
-        @"+"
+        @"|"
+      | _ -> 
+        failwith "Unsupported lambda calculus type declaration."
+    member this.ToFSharpInner =
+      match this with
+      | Arrow(t,u) ->
+        sprintf @"-> %s %s" (t.ToFSharp) (u.ToFSharpInner)
+      | t -> 
+        sprintf @"-> %s" t.ToFSharp
+    member this.ToFSharp =
+      match this with
+      | Id s -> s
+      | Var s -> sprintf "'%s" s
+      | Arrow(t,u) ->
+        sprintf @"(%s %s)" (t.ToFSharp) (u.ToFSharpInner)
+//      | Mu(a,u) ->
+//        sprintf @"($\mu$%s$\Rightarrow$%s)" (toGreekLetter a) (u.ToLambdaMuInner)
+      | Application(Application(Product,t),u) ->
+        sprintf @"(%s*%s)" (t.ToFSharp) (u.ToFSharp)
+      | Application(Application(Sum,t),u) ->
+        sprintf @"Choice<%s,%s>" (t.ToFSharp) (u.ToFSharp)
+      | Application(t,u) ->
+        sprintf @"(%s %s)" (t.ToFSharp) (u.ToFSharp)
+      | Unit ->
+        "Unit"
+      | String ->
+        "string"
+      | Boolean ->
+        "bool"
+      | Nat ->
+        "int"
+      | Product ->
+        @"*"
+      | Sum ->
+        @"Choice"
+      | Record(fs) ->
+        let decls = fs |> List.map (fun (n,t) -> sprintf "%s:%s" n t.ToFSharp) |> List.reduce (fun a b -> a + "; " + b)
+        sprintf @"{ %s }" decls
+      | Union(cs) ->
+        let caseArgs (ts:List<Type>) = 
+          match ts with
+          | [] -> ""
+          | _ ->
+            let args = ts |> List.map (fun t -> t.ToLambda) |> List.reduce (fun a b -> a + "*" + b)
+            let res = sprintf " of %s" args
+            res
+        let decls = cs |> List.map (fun (n,t) -> sprintf "\n  | %s%s" n (caseArgs t)) |> List.reduce (+)
+        decls
+      | _ -> failwith "Unsupported F\# type declaration."
 
 type Term =
   | Type of Type
@@ -76,7 +137,14 @@ type Term =
   | Lambda of (string * Type) * Term
   | TypeApplication of Term * Type
   | TypeLambda of string * Term
+  | TypeLet of string * Type * Term
   | Let of (string * Type) * Term * Term
+  | MakeRecord of List<string * Term>
+  | RecordWith of Term * List<string * Term>
+  | MatchCustom of Term * List<string * List<string> * Term>
+  | Unit
+  | Dot of Term * string
+  | StringConst of string
   | True
   | False
   | Not
@@ -159,10 +227,15 @@ type Term =
       | TypeLambda(x,t) -> 1 + t.Length
       | TypeApplication(t,u) -> t.Length + u.Length
       | Type(t) -> 1 + t.Length
+      | Match -> 10
+      | MatchCustom(_) -> 10
       | _ -> 1
 
     member this.ToLambda (printTypes:PrintTypes) =
       match this with
+      | Unit -> "()"
+      | TypeLet(t_n,t,u) -> 
+        sprintf "%s%s" (printTypes.PrintTypeDecl t_n t) (u.ToLambda printTypes)
       | Type t -> 
         printTypes.PrintType t
       | TypeApplication(t,a) ->
@@ -222,10 +295,17 @@ type Term =
       | Match -> sprintf @"match"
       | Inl -> sprintf @"inl"
       | Inr -> sprintf @"inr"
+      | MakeRecord(fs) ->
+        let decls = fs |> List.map (fun (n,t) -> sprintf "%s = %s" n (t.ToLambda printTypes)) |> List.reduce (fun a b -> a + "; " + b)
+        sprintf @"{ %s }" decls
+      | _ -> failwith "Unsupported lambda term."
     member this.ToString (printTypes:PrintTypes) =
       match this with
+      | Unit -> "()"
       | Type t -> 
         printTypes.PrintType t
+      | TypeLet(t_n,t,u) -> 
+        sprintf "%s%s" (printTypes.PrintTypeDecl t_n t) (u.ToLambda printTypes)
       | TypeApplication(t,a) ->
         printTypes.PrintTypeApplication (t.ToString printTypes) a
       | TypeLambda(a,t) ->
@@ -261,6 +341,10 @@ type Term =
       | Match -> sprintf @"match"
       | Inl -> sprintf @"inl"
       | Inr -> sprintf @"inr"
+      | MakeRecord(fs) ->
+        let decls = fs |> List.map (fun (n,t) -> sprintf "%s = %s" n (t.ToString printTypes)) |> List.reduce (fun a b -> a + "; " + b)
+        sprintf @"{ %s }" decls
+      | _ -> failwith "Unsupported lambda term."
     member this.ToFSharpInner newLine (printTypes:PrintTypes) pre =
       match this with
       | TypeLambda(x,t) -> t.ToFSharpInner newLine printTypes pre
@@ -272,8 +356,11 @@ type Term =
         sprintf "-> %s%s" nl (this.ToFSharp printTypes pre)
     member this.ToFSharp (printTypes:PrintTypes) pre =
       match this with
+      | Unit -> "()"
       | Type t -> 
         printTypes.PrintType t
+      | TypeLet(t_n,t,u) -> 
+        sprintf "%s%s" (printTypes.PrintTypeDecl t_n t) (u.ToFSharp printTypes pre)
       | TypeApplication(t,a) ->
         sprintf "%s%s" pre (printTypes.PrintTypeApplication (t.ToFSharp printTypes "") a)
       | TypeLambda(a,t) ->
@@ -288,6 +375,7 @@ type Term =
       | Application(Application(Mult,t),u) -> sprintf "%s(%s * %s)" pre (t.ToFSharp printTypes "") (u.ToFSharp printTypes "")
       | Application(IsZero,t) -> sprintf @"%s(%s = 0)" pre (t.ToFSharp printTypes "")
       | Application(Application(Application(If,c),t),e) -> sprintf "%sif %s then\n%s\n%selse\n%s\n" pre (c.ToFSharp printTypes "") (t.ToFSharp printTypes (pre + "  ")) pre (e.ToFSharp printTypes (pre + "  "))
+      | Application(Application(Var"::",t),u) -> sprintf @"%s%s :: %s" pre (t.ToFSharp printTypes "") (u.ToFSharp printTypes "")
       | Application(Application(MakePair,t),u) -> sprintf @"%s(%s, %s)" pre (t.ToFSharp printTypes "") (u.ToFSharp printTypes "")
       | Application(Application(Application(Match, t), Lambda(x,f)), (Lambda(y,g))) ->
         let f' = f.replace (fst x) (Var"x")
@@ -329,10 +417,34 @@ type Term =
       | Match -> sprintf @"match"
       | Inl -> sprintf @"Choice1Of2"
       | Inr -> sprintf @"Choice2Of2"
+      | StringConst(s) ->
+        sprintf @"""%s""" s
+      | Dot(r,f) ->
+        sprintf @"%s.%s" (r.ToFSharp printTypes pre) f
+      | MakeRecord(fs) ->
+        let decls = fs |> List.map (fun (n,t) -> sprintf "%s = %s" n (t.ToFSharp printTypes "")) |> List.reduce (fun a b -> a + "; " + b)
+        sprintf @"%s{ %s }" pre decls
+      | RecordWith(r,fs) ->
+        let decls = fs |> List.map (fun (n,t) -> sprintf "%s = %s" n (t.ToFSharp printTypes "")) |> List.reduce (fun a b -> a + "; " + b)
+        sprintf @"%s{ %s with %s }" pre (r.ToFSharp printTypes "") decls
+      | MatchCustom(u,ps) ->
+        let makeArgs (c:string) (a:List<string>) = 
+          let args =
+            match a with
+            | [] -> ""
+            | _ ->
+              sprintf @"(%s)" (a |> List.reduce (fun x y -> x + ", " + y))
+          sprintf "%s%s" c args
+        let makePattern ((c,a,t):string*List<string> * Term) =
+          let args = makeArgs c a
+          sprintf "%s| %s -> %s" pre args (t.ToFSharp printTypes "")
+        let cases = ps |> List.map makePattern |> List.reduce (fun a b -> a + "\n" + b)
+        sprintf "%smatch %s with\n%s" pre (u.ToFSharp printTypes "") cases
 
 and PrintTypes =
   { PrintVar : (string * Type) -> string;
     PrintType : Type -> string;
+    PrintTypeDecl : string -> Type -> string;
     PrintTypeLambda : string -> string;
     PrintTypeApplication : string -> Type -> string }
   with 
@@ -340,6 +452,7 @@ and PrintTypes =
       {
         PrintVar = fst
         PrintType = (fun _ -> "")
+        PrintTypeDecl = (fun _ _ -> "")
         PrintTypeLambda = (fun a -> "")
         PrintTypeApplication = (fun t a -> t)
       }
@@ -347,8 +460,17 @@ and PrintTypes =
       {
         PrintVar = (fun (x,t) -> sprintf "(%s:%s)" x (t.ToLambda))
         PrintType = (fun t -> t.ToLambda)
+        PrintTypeDecl = (fun t_n t -> sprintf "type %s = %s in" t_n t.ToLambda)
         PrintTypeLambda = (fun a -> sprintf @"$\Lambda$%s$\Rightarrow$" (toGreekLetter a))
         PrintTypeApplication = (fun t a -> sprintf "(%s %s)" t (a.ToLambda))
+      }
+    static member TypedFSharp =
+      {
+        PrintVar = (fun (x,t) -> sprintf "(%s:%s)" x (t.ToFSharp))
+        PrintType = (fun t -> t.ToLambda)
+        PrintTypeDecl = (fun t_n t -> sprintf "type %s = %s\n" t_n t.ToFSharp)
+        PrintTypeLambda = (fun a -> sprintf @"<'%s>" a)
+        PrintTypeApplication = (fun t a -> sprintf "%s<%s>" t (a.ToFSharp))
       }
 
 let (!!) x = Var x
@@ -356,6 +478,7 @@ let (>>) t u = Application(t,u)
 let (>>=) t u = TypeApplication(t,u)
 let (==>) (x,x_t) t = Lambda((x,x_t), t)
 let (!!!) x = Type.Var x
+let (!!!!) x = Type.Id x
 let (~-) x = x,!!!""
 let (>=>) a t = TypeLambda(a, t)
 let (>>>) t u = Type.Application(t,u)
@@ -366,7 +489,7 @@ let invDefaultTypes,defaultTypes =
   [
     Boolean, Forall("a", !!!"a" --> (!!!"a" --> !!!"a"))
     Nat, Forall("a", (!!!"a" --> !!!"a") --> (!!!"a" --> !!!"a"))
-    Type.Product, Forall("a", Forall("b", Forall("c", !!!"a" --> (!!!"b" --> !!!"c"))))
+    Type.Product, Forall("a", Forall("b", Forall("c", (!!!"a" --> (!!!"b" --> !!!"c")) --> !!!"c")))
     Type.Sum, Forall("a", Forall("b", Forall("c", (!!!"a" --> !!!"c") --> ((!!!"b" --> !!!"c") --> !!!"c"))))
   ] |> (fun l -> l |> List.map (fun (x,y) -> y,x) |> Map.ofList, l |> Map.ofList)
 
@@ -388,8 +511,8 @@ let invDefaultTerms, defaultTerms =
 
       Fix, ("a" >=> (("f",!!!"a" --> !!!"a") ==> ((-"x" ==> (!!"f" >> (!!"x" >> !!"x"))) >> (-"x" ==> (!!"f" >> (!!"x" >> !!"x"))))))
       MakePair, ("a" >=> ("b" >=> (("x",!!!"a") ==> (("y",!!!"b") ==> ("c" >=> (("f",(!!!"a" --> (!!!"b" --> !!!"c"))) ==> ((!!"f" >> !!"x") >> !!"y")))))))
-      First, ("a" >=> ("b" >=> (("p",((Type.Product >>> !!!"a") >>> !!!"b")) ==> ((!!"p" >>= !!!"a") >> (("x",!!!"a") ==> (("y",!!!"a") ==> (!!"x")))))))
-      Second, ("a" >=> ("b" >=> (("p",((Type.Product >>> !!!"a") >>> !!!"b")) ==> ((!!"p" >>= !!!"a") >> (("x",!!!"a") ==> (("y",!!!"a") ==> (!!"y")))))))
+      First, ("a" >=> ("b" >=> (("p",((Type.Product >>> !!!"a") >>> !!!"b")) ==> ((!!"p" >>= !!!"a") >> (("x",!!!"a") ==> (("y",!!!"b") ==> (!!"x")))))))
+      Second, ("a" >=> ("b" >=> (("p",((Type.Product >>> !!!"a") >>> !!!"b")) ==> ((!!"p" >>= !!!"b") >> (("x",!!!"a") ==> (("y",!!!"b") ==> (!!"y")))))))
 
       Inl, ("a" >=> ("b" >=> (("x",!!!"a") ==> ("c" >=> (("f",(!!!"a" --> !!!"c")) ==> (("g",(!!!"b" --> !!!"c")) ==> (!!"f" >> !!"x")))))))
       Inr, ("a" >=> ("b" >=> (("y",!!!"b") ==> ("c" >=> (("f",(!!!"a" --> !!!"c")) ==> (("g",(!!!"b" --> !!!"c")) ==> (!!"g" >> !!"y")))))))

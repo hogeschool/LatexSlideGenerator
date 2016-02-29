@@ -26,7 +26,7 @@ type LatexElement =
   | Items of List<LatexElement>
   | PythonCodeBlock of TextSize * Code
   | LambdaCodeBlock of TextSize * Term * showTypes:bool
-  | FSharpCodeBlock of TextSize * Term
+  | FSharpCodeBlock of TextSize * Term * showTypes:bool
   | CSharpCodeBlock of TextSize * Code
   | Unrepeated of LatexElement
   | Tiny
@@ -82,9 +82,9 @@ type LatexElement =
               let slide = sprintf @"%s Stack: %s\\%s%s" textSize stack input output
               yield slide ]
         stackTraceTables |> List.fold (+) ""
-      | FSharpCodeBlock (ts, c) ->
+      | FSharpCodeBlock (ts, c, showTypes) ->
           let textSize = ts.ToString()
-          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp PrintTypes.Untyped "") endCode
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp (if showTypes then PrintTypes.TypedFSharp else PrintTypes.Untyped) "") endCode
       | LambdaCodeBlock(ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (c.ToLambda (if showTypes then PrintTypes.TypedLambda else PrintTypes.Untyped)) endCode
@@ -149,9 +149,9 @@ type LatexElement =
       | PythonCodeBlock (ts,c) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}%s%s%s" textSize (beginCode "Python") (c.AsPython "") endCode, []
-      | FSharpCodeBlock (ts, c) ->
+      | FSharpCodeBlock (ts, c, showTypes) ->
           let textSize = ts.ToString()
-          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp PrintTypes.Untyped "") endCode, []
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp (if showTypes then PrintTypes.TypedFSharp else PrintTypes.Untyped) "") endCode, []
       | LambdaCodeBlock(ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToLambda (if showTypes then PrintTypes.TypedLambda else PrintTypes.Untyped)) endCode, []
@@ -200,9 +200,9 @@ type LatexElement =
       | PythonCodeBlock (ts,c) ->
           let textSize = ts.ToString()
           sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s" beginFrame textSize (beginCode "Python") (c.AsPython "") endCode endFrame
-      | FSharpCodeBlock (ts, c) ->
+      | FSharpCodeBlock (ts, c, showTypes) ->
           let textSize = ts.ToString()
-          sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToFSharp PrintTypes.Untyped "") endCode endFrame
+          sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToFSharp (if showTypes then PrintTypes.TypedFSharp else PrintTypes.Untyped) "") endCode endFrame
       | LambdaCodeBlock (ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToLambda (if showTypes then PrintTypes.TypedLambda else PrintTypes.Untyped)) endCode endFrame

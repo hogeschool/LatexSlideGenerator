@@ -22,8 +22,8 @@
         System.IO.File.Move(pdf, final_pdf)
       with
       | e -> printfn "File move complaint: %A" e
-      do System.Console.ReadLine() |> ignore
       if openPDF then
+        do System.Console.ReadLine() |> ignore
         try
           do (System.Diagnostics.Process.Start(final_pdf)).WaitForExit()
         with

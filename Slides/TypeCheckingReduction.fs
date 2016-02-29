@@ -13,34 +13,63 @@ let (|ConstInt|_|) =
   | _ ->
     None
 
-let reduce (p:Coroutine<_,Unit>) : Coroutine<_,Unit> = 
+let rec reduceType p : Coroutine<_,Unit> =
+  co{
+    do! 
+      co{
+        let! (k,t) = getState
+        match t with
+        | Type(Type.Application(t,u)) ->
+          do! setState ((fun t -> k(Application(t,Type(u)))), Type t)
+          do! reduceType p
+          let! (k1,t_t) = getState
+          do! setState ((fun u -> k(Application(t_t,u))), Type u)
+          let! (k2,u_t) = getState
+          do! reduceType p
+          do! setState (k, Application(t_t,u_t))
+          do! reduce p
+          return()
+        | _ ->
+          return()
+      }
+    let! (k,t) = getState
+    match t with
+    | Type t ->
+      match defaultTypes |> Map.tryFind t with
+      | Some t' ->
+        do! setState (k, Highlighted(Type t,Underlined))
+        do! p
+        do! setState (k, Highlighted(Type t',Colored))
+        do! p
+        do! setState (k, Type t')
+        do! p
+        return ()
+      | _ ->
+        match invDefaultTypes |> Map.tryFind t with
+        | Some t' ->
+          do! setState (k, Highlighted(Type t,Underlined))
+          do! p
+          do! setState (k, Highlighted(Type t',Colored))
+          do! p
+          do! setState (k, Type t')
+          do! p
+          return ()
+        | _ ->
+          return ()
+    | _ ->
+      return failwith "Unexpected term."
+  }
+
+and reduce (p:Coroutine<_,Unit>) : Coroutine<_,Unit> = 
   let rec reduce p = 
     let rec reduce_step p = 
       co{
-          let! (k,t) = getState
+          let! (k,(t:Term)) = getState
           match t with
           | Type t -> 
-            match defaultTypes |> Map.tryFind t with
-            | Some t' ->
-              do! setState (k, Highlighted(Type t,Underlined))
-              do! p
-              do! setState (k, Highlighted(Type t',Colored))
-              do! p
-              do! setState (k, Type t')
-              do! p
-              return ()
-            | _ ->
-              match invDefaultTypes |> Map.tryFind t with
-              | Some t' ->
-                do! setState (k, Highlighted(Type t,Underlined))
-                do! p
-                do! setState (k, Highlighted(Type t',Colored))
-                do! p
-                do! setState (k, Type t')
-                do! p
-                return ()
-              | _ ->
-                return ()
+            do! reduceType p
+            let! (k,t) = getState
+            return ()
           | Lambda(x,f) -> 
             do! setState ((fun f -> k(Highlighted(Lambda(x,f),Underlined))), f)
             do! p
@@ -60,15 +89,14 @@ let reduce (p:Coroutine<_,Unit>) : Coroutine<_,Unit> =
               do! p
               do! setState (k, Type(Arrow(snd x,f_t)))
               do! p
-              do! reduce p
               return ()
-            | _ ->
+//            | f_t when f_t <> f_h ->
+//              do! reduce p
+//              return ()
+            | f_t ->
               return failwith "Unsupported type checking construct"
           | TypeLambda(a,f) -> 
-  //          do! setState ((fun f -> k(Highlighted(TypeLambda(a,f)))), f)
-  //          do! p
             do! setState ((fun f -> k(TypeLambda(a,f))), f)
-  //          do! p
             do! reduce p
             let! (k1,f_t) = getState
             match f_t with
@@ -79,9 +107,11 @@ let reduce (p:Coroutine<_,Unit>) : Coroutine<_,Unit> =
               do! p
               do! setState (k, Type(Forall(a,f_t)))
               do! p
-              do! reduce p
               return ()
-            | _ ->
+//            | f_t when f_t <> f ->
+//              do! reduce p
+//              return ()
+            | f_t ->
               return failwith "Unsupported type checking construct"
           | TypeApplication(t,u) ->
             do! setState (k, Application(t,Type(u)))
