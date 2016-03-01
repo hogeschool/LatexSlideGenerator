@@ -524,7 +524,7 @@ let invDefaultTerms, defaultTerms =
     ] |> (fun l -> l |> List.map (fun (x,y) -> y,x),l)
   let inverse = 
     inverse @
-      [
+     ([
         True, (-"t" ==> (-"f" ==> (!!"t")))
         False, (-"t" ==> (-"f" ==> (!!"f")))
         And, (-"p" ==> (-"q" ==> (!!"p" >> !!"q" >> !!"p")))
@@ -543,7 +543,7 @@ let invDefaultTerms, defaultTerms =
         Inl, (-"x" ==> (-"f" ==> (-"g" ==> (!!"f" >> !!"x"))))
         Inr, (-"y" ==> (-"f" ==> (-"g" ==> (!!"g" >> !!"y"))))
         Match, (-"u" ==> (-"f" ==> (-"g" ==> ((!!"u" >> !!"f") >> !!"g"))))
-      ] |> List.map (fun (x,y) -> y,x)
+      ] |> List.map (fun (x,y) -> y,x))
   inverse |> Map.ofList,forward |> Map.ofList
 
 let deltaRules (t:Term) : Option<Term> =

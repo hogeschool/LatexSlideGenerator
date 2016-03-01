@@ -277,7 +277,7 @@ let rec reduce maxSteps expandInsideLambda showArithmetics showControlFlow showL
             let! replacedT = reduce_step on_lambda p
             let! (k1,t_new) = getState
             do! setState ((fun u -> k(Application(t_new,u))), u)
-            let! replacedU = reduce_step on_lambda p
+            let! replacedU = reduce (maxSteps - 1) on_lambda p
             let! (k2,u_new) = getState
             do! setState (k, Application(t_new,u_new))
             return replacedT || replacedU
