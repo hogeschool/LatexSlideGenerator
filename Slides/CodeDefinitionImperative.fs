@@ -319,8 +319,11 @@ type Code =
       | s -> failwithf "Unsupported C# statement %A" s
     member this.NumberOfCSharpLines = 
       let code = ((this.AsCSharp ""):string).TrimEnd([|'\n'|])
-      let lines = code.Split([|'\n'|])
-      lines.Length
+      if code = "" then 
+        0
+      else 
+        let lines = code.Split([|'\n'|])
+        lines.Length
 
 
 

@@ -353,9 +353,10 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
       | _ -> return failwith "Malformed if"
     | StaticMethodCall("Console","WriteLine",[arg]) ->
       let! argType = typeCheck arg
-      match argType with
-      | StringType -> return VoidType
-      | _ -> return failwithf "Wrong argument type %s for console.writeline" (argType.AsCSharp "")
+      return VoidType
+//      match argType with
+//      | StringType -> return VoidType
+//      | _ -> return failwithf "Wrong argument type %s for console.writeline" (argType.AsCSharp "")
     | StaticMethodCall("Console","ReadLine",[]) ->
       return StringType
     | StaticMethodCall("Int32","Parse",[i]) ->

@@ -122,6 +122,35 @@ type LatexElement =
               yield slide ]
         let res = stackTraceTables |> List.fold (+) ""
         res
+      | CSharpTypeTrace(ts,p,st) ->
+        let textSize = ts.ToString()
+        let stackTraces = st :: runToEnd (typeCheckCSharp p) st
+        let ps = (p.AsCSharp "").TrimEnd([|'\n'|])
+        let code = sprintf @"\lstset{basicstyle=\ttfamily%s}%s%s%s" textSize (beginCode "[Sharp]C") ps endCode
+
+        let stackTraceTables = 
+          [ for st in stackTraces do 
+            let declarations,classes = st.AsSlideContent Dots (function Code.Hidden _ -> true | _ -> false) ConstInt (fun (c:Code) -> c.AsCSharp)
+            let declarations = if declarations = "" then "" else "Declarations: " + declarations
+            let classes = if classes = "" then "" else "Classes: " + classes
+            let slide = sprintf @"\item {%s %s \\ %s \\}" textSize declarations classes
+            yield slide ]
+        code + (@"\begin{enumerate} " + (stackTraceTables |> List.fold (+) "") + @" \end{enumerate}")
+      | CSharpStateTrace(ts,p,st) ->
+        let textSize = ts.ToString()
+        let heapLabel,stackLabel = "Heap: ","Stack: "
+        let stackTraces = st :: runToEnd (runCSharp p) st
+        let ps = (p.AsCSharp "").TrimEnd([|'\n'|])
+        let code = sprintf @"\lstset{basicstyle=\ttfamily%s}%s%s%s" textSize (beginCode "[Sharp]C") ps endCode
+        let stackTraceTables = 
+          [ for st in stackTraces do 
+            let stack,heap,input,output = st.AsSlideContent Dots (function Code.Hidden _ -> true | _ -> false) (fun c -> c.AsCSharp)
+            let input = if input = "" then "" else "Input: " + input + @"\\"
+            let output = if output = "" then "" else "Output: " + output + @"\\"
+            let heap = if heap = "" then "" else heapLabel + heap + @"\\"
+            let slide = sprintf @"\item {%s %s%s\\%s%s%s}" textSize stackLabel stack heap input output
+            yield slide ]
+        code + (@"\begin{enumerate} " + (stackTraceTables |> List.fold (+) "") + @" \end{enumerate}")
       | VerticalStack items ->
           let items = items |> List.map (fun item -> let i = item.ToDocumentString() in i + "\n")
           let allItems = items |> List.map (fun i -> i + " \n") |> List.fold (+) ""

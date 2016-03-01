@@ -215,7 +215,7 @@ type Term =
         sprintf @"$\rightarrow$%s %s" (printTypes.PrintTypeLambda a) (t.ToLambda printTypes)
       | Lambda(x,t) -> sprintf @" %s%s" !x (t.ToLambdaInner printTypes)
       | Highlighted(Lambda(x,t),Underlined) ->
-        sprintf @"(*@\underline{%s}@*)%s" !x ((Highlighted(t,Underlined)).ToLambdaInner printTypes)
+        sprintf @"(*@\colorbox{orange}{%s}@*)%s" !x ((Highlighted(t,Underlined)).ToLambdaInner printTypes)
       | Highlighted(Lambda(x,t),Colored) ->
         sprintf @"(*@\colorbox{yellow}{%s}@*)%s" !x ((Highlighted(t,Colored)).ToLambdaInner printTypes)
       | _ -> sprintf @"$\rightarrow$%s" (this.ToLambda printTypes)
@@ -247,26 +247,28 @@ type Term =
       | Highlighted(t,Colored) -> 
         sprintf @"(*@\colorbox{yellow}{%s}@*)" (t.ToLambda printTypes)
       | Highlighted(t,Underlined) -> 
-        if t.Length <= 10 then
-          sprintf @"(*@\underline{%s}@*)" (t.ToLambda printTypes)
-        else
-          match t with
-//          | Application(Application(And,t),u) -> sprintf @"(%s $\wedge$ %s)" (t.ToLambda) (u.ToLambda)
-//          | Application(Application(Or,t),u) -> sprintf @"(%s $\vee$ %s)" (t.ToLambda) (u.ToLambda)
-//          | Application(Application(Plus,t),u) -> sprintf @"(%s $+$ %s)" (t.ToLambda) (u.ToLambda)
-//          | Application(Application(Minus,t),u) -> sprintf @"(%s $-$ %s)" (t.ToLambda) (u.ToLambda)
-//          | Application(Application(Mult,t),u) -> sprintf @"(%s $\times$ %s)" (t.ToLambda) (u.ToLambda)
-//          | Application(IsZero,t) -> sprintf @"(%s $=$ 0)" (t.ToLambda)
-          | Application(Application(Application(If,c),t),e) -> 
-            Application(Application(Application(If,Highlighted(c,Underlined)),Highlighted(t,Underlined)),Highlighted(e,Underlined)).ToLambda printTypes
-          | Application(t,u) ->
-            Application(Highlighted(t,Underlined),Highlighted(u,Underlined)).ToLambda printTypes
-          | Lambda(x,t) -> 
-            sprintf @"(*@\underline{$\lambda$%s$\rightarrow$}@*) %s" (printTypes.PrintVar x) ((Highlighted(t,Underlined)).ToLambdaInner printTypes)
-          | TypeLambda(a,t) -> 
-            sprintf @"(*@\underline{%s}@*) %s" (printTypes.PrintTypeLambda a) (Highlighted(t,Underlined).ToLambda printTypes)
-          | t -> 
-            t.ToLambda printTypes
+        sprintf @"(*@\colorbox{orange}{%s}@*)" (t.ToLambda printTypes)
+//      | Highlighted(t,Underlined) -> 
+//        if t.Length <= 10 then
+//          sprintf @"(*@\underline{%s}@*)" (t.ToLambda printTypes)
+//        else
+//          match t with
+////          | Application(Application(And,t),u) -> sprintf @"(%s $\wedge$ %s)" (t.ToLambda) (u.ToLambda)
+////          | Application(Application(Or,t),u) -> sprintf @"(%s $\vee$ %s)" (t.ToLambda) (u.ToLambda)
+////          | Application(Application(Plus,t),u) -> sprintf @"(%s $+$ %s)" (t.ToLambda) (u.ToLambda)
+////          | Application(Application(Minus,t),u) -> sprintf @"(%s $-$ %s)" (t.ToLambda) (u.ToLambda)
+////          | Application(Application(Mult,t),u) -> sprintf @"(%s $\times$ %s)" (t.ToLambda) (u.ToLambda)
+////          | Application(IsZero,t) -> sprintf @"(%s $=$ 0)" (t.ToLambda)
+//          | Application(Application(Application(If,c),t),e) -> 
+//            Application(Application(Application(If,Highlighted(c,Underlined)),Highlighted(t,Underlined)),Highlighted(e,Underlined)).ToLambda printTypes
+//          | Application(t,u) ->
+//            Application(Highlighted(t,Underlined),Highlighted(u,Underlined)).ToLambda printTypes
+//          | Lambda(x,t) -> 
+//            sprintf @"(*@\underline{$\lambda$%s$\rightarrow$}@*) %s" (printTypes.PrintVar x) ((Highlighted(t,Underlined)).ToLambdaInner printTypes)
+//          | TypeLambda(a,t) -> 
+//            sprintf @"(*@\underline{%s}@*) %s" (printTypes.PrintTypeLambda a) (Highlighted(t,Underlined).ToLambda printTypes)
+//          | t -> 
+//            t.ToLambda printTypes
       | Application(Application(And,t),u) -> sprintf @"(%s $\wedge$ %s)" (t.ToLambda printTypes) (u.ToLambda printTypes)
       | Application(Application(Or,t),u) -> sprintf @"(%s $\vee$ %s)" (t.ToLambda printTypes) (u.ToLambda printTypes)
       | Application(Application(Plus,t),u) -> sprintf @"(%s $+$ %s)" (t.ToLambda printTypes) (u.ToLambda printTypes)

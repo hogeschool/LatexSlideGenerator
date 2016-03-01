@@ -256,7 +256,9 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
             match m with
             | Assign(f,ConstLambda(_,args,body)) -> 
               let pc = m_pc + 1
-              m_pc <- m_pc + 2 + (body |> numberOfLines)
+              let nl = body |> numberOfLines
+              m_pc <- m_pc + 2 + nl
+              do printfn "%s: %A @ %d" f nl pc
               match m_orig with
               | Static _ -> 
                 yield f,ConstLambda(pc,args,body)
