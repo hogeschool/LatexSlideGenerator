@@ -142,8 +142,9 @@ let changePC f =
 
 let incrPC : Coroutine<TypeCheckingState<Code>,Unit> = changePC ((+) 1)
 
-let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) : Coroutine<TypeCheckingState<Code>,Code> =
-  let typeCheck = typeCheck addThisToMethodArgs consName toString numberOfLines
+let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toString numberOfLines (p:Code) : Coroutine<TypeCheckingState<Code>,Code> =
+  let invisibleTypeCheck = typeCheck showMethodsTypeChecking (ret()) addThisToMethodArgs consName toString numberOfLines
+  let typeCheck = typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toString numberOfLines
   co{
     match p with
     | Dots -> 
@@ -164,13 +165,25 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
     | ConstString s ->
       return StringType
     | Assign (v,e) ->
-      let! res = typeCheck e
-      do! if v.Split([|'.'|]).Length > 1 then ret() else changeState (fun s -> store s v res)
+//      let! res = typeCheck e
+//      do! if v.Split([|'.'|]).Length > 1 then ret() else changeState (fun s -> store s v res)
       return None
     | TypedDecl(v,t,Option.None) ->
-      return! typeCheck (Assign(v, Hidden(None)))
+      do! changeState 
+            (fun s -> 
+              if s.Variables.IsEmpty then
+                { s with Variables = [Map.empty |> Map.add v (typeFromName t)] }
+              else 
+                { s with Variables = (s.Variables.Head |> Map.add v (typeFromName t)) :: s.Variables.Tail })
+      return None
     | TypedDecl(v,t,Some y) ->
-      return! typeCheck (Assign(v, y))
+      do! changeState 
+            (fun s -> 
+              if s.Variables.IsEmpty then
+                { s with Variables = [Map.empty |> Map.add v (typeFromName t)] }
+              else 
+                { s with Variables = (s.Variables.Head |> Map.add v (typeFromName t)) :: s.Variables.Tail })
+      return None
     | Sequence (p,k) ->
       let! _ = typeCheck p
       do! incrPC
@@ -213,7 +226,7 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
           for m in ms do
             match m with
             | TypedSig(f,args,t) -> 
-              yield f,ArrowType(args |> List.map fst |> List.map typeFromName, typeFromName t)
+              yield f,ArrowType(ClassType f :: (args |> List.map fst |> List.map typeFromName), typeFromName t)
             | _ -> ()
         ] |> Map.ofList
       do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object(msValsByName)))) })
@@ -252,7 +265,7 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
             match m with
             | TypedDef(m,args,t,b) as td -> 
               do! incrPC
-              let! m_t = typeCheck td
+              let! m_t = (if showMethodsTypeChecking then typeCheck else invisibleTypeCheck) td
               let! ms_t = typeCheckMethods ms
               return m_t :: ms_t
             | _ ->
@@ -457,4 +470,4 @@ let rec typeCheck addThisToMethodArgs consName toString numberOfLines (p:Code) :
   }
 
 
-let typeCheckCSharp p = typeCheck (fun c args -> "this" :: args) id (fun (c:Code) -> c.AsCSharp "") (fun (c:Code) -> c.NumberOfCSharpLines) p
+let typeCheckCSharp showMethodsTypeChecking p = typeCheck showMethodsTypeChecking pause (fun c args -> "this" :: args) id (fun (c:Code) -> c.AsCSharp "") (fun (c:Code) -> c.NumberOfCSharpLines) p

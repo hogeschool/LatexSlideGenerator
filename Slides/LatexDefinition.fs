@@ -37,7 +37,7 @@ type LatexElement =
   | VerticalStack of List<LatexElement>
   | PythonStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpStateTrace of TextSize * Code * RuntimeState<Code>
-  | CSharpTypeTrace of TextSize * Code * TypeCheckingState<Code>
+  | CSharpTypeTrace of TextSize * Code * TypeCheckingState<Code> * showMethodsTypeChecking:bool
   | LambdaStateTrace of textSize:TextSize * term:Term * maxSteps:Option<int> * expandInsideLambda:bool * showArithmetics:bool * showControlFlow:bool * showLet:bool * showPairs:bool * showUnions:bool
   | LambdaTypeTrace of textSize:TextSize * term:Term
   with
@@ -122,9 +122,9 @@ type LatexElement =
               yield slide ]
         let res = stackTraceTables |> List.fold (+) ""
         res
-      | CSharpTypeTrace(ts,p,st) ->
+      | CSharpTypeTrace(ts,p,st,showMethodsTypeChecking) ->
         let textSize = ts.ToString()
-        let stackTraces = st :: runToEnd (typeCheckCSharp p) st
+        let stackTraces = st :: runToEnd (typeCheckCSharp showMethodsTypeChecking p) st
         let ps = (p.AsCSharp "").TrimEnd([|'\n'|])
         let code = sprintf @"\lstset{basicstyle=\ttfamily%s}%s%s%s" textSize (beginCode "[Sharp]C") ps endCode
 
@@ -261,9 +261,9 @@ type LatexElement =
             let slide = sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s Stack: %s\\%s%s%s%s" beginFrame textSize (beginCode "Python") ps endCode textSize stack heap input output endFrame
             yield slide ]
         stackTraceTables |> List.fold (+) ""
-      | CSharpTypeTrace(ts,p,st) ->
+      | CSharpTypeTrace(ts,p,st,showMethodsTypeChecking) ->
         let textSize = ts.ToString()
-        let stackTraces = st :: runToEnd (typeCheckCSharp p) st
+        let stackTraces = st :: runToEnd (typeCheckCSharp showMethodsTypeChecking p) st
         let ps = (p.AsCSharp "").TrimEnd([|'\n'|])
         let stackTraceTables = 
           [ for st in stackTraces do 
