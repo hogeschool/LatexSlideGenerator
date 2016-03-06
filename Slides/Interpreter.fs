@@ -219,7 +219,7 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
     | End -> 
       let! s = getState
       return None
-    | Implementation i -> return None
+    | Implementation i | Inheritance i -> return None
     | InterfaceDef (n,ms) as intf ->
       let! pc = getPC
       let! s = getState
@@ -242,7 +242,13 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
     | ClassDef (n,ms) as cls ->
       let! pc = getPC
       let! s = getState
-      let allMethods = ms |> List.filter (function Implementation _ -> false | _ -> true)
+      let allMethods = ms |> List.filter (function Implementation _ -> false | Inheritance _ -> false | _ -> true)
+      let allBaseMethods = 
+        let baseClasses = 
+          ms |> List.filter (function Inheritance _ -> true | _ -> false)
+             |> List.map (function Inheritance i -> i,s.Heap.[i] | _ -> failwith "Malformed inheritance declaration.")
+             |> List.map (function (i,Hidden(Object(o))) -> [ for x in o |> Map.remove i do yield x.Key, x.Value ] | _ -> failwith "Malformed inheritance declaration.")
+        baseClasses |> List.fold (@) []
       let! msVals = allMethods |> mapCo interpret
       let mutable m_pc = pc + 1
       let fields = ms |> List.filter (function TypedDecl(_) | Private(TypedDecl(_)) | Public(TypedDecl(_)) -> true | _ -> false) 
@@ -265,7 +271,7 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
                 yield f,ConstLambda(pc,addThisToMethodArgs n args,body)
             | _ -> 
               m_pc <- m_pc + 1
-        ] |> Map.ofList
+        ] @ allBaseMethods |> Map.ofList
       do! setState { s with Heap = (s.Heap |> Map.add n (Hidden(Object(msValsByName |> Map.add "__name" (ConstString n))))) }
       let nl = cls |> numberOfLines
       do! changePC ((+) (nl - 1))

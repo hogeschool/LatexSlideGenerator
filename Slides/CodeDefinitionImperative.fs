@@ -22,6 +22,7 @@ type Operator = Plus | Minus | Times | DividedBy | GreaterThan | Equals
 let toJavaType =
   function
   | "bool" -> "boolean"
+  | "string" -> "String"
   | t -> t
 
 let (!+) = List.fold (+) ""
@@ -38,6 +39,7 @@ type Code =
   | Object of Map<string, Code>
   | New of string * List<Code>
   | Implementation of string
+  | Inheritance of string
   | InterfaceDef of string * List<Code>
   | ClassDef of string * List<Code>
   | Return of Code
@@ -142,8 +144,7 @@ type Code =
       | End -> ""
       | None -> "null"
       | Dots -> "...\n"
-      | Implementation i -> 
-        ""
+      | Implementation i | Inheritance i -> ""
       | InterfaceDef(s,ms) ->
         let mss = ms |> List.map (fun m -> m.AsJava (pre + "  "))
         let res = sprintf "interface %s {\n%s%s}\n" s (!+mss) pre
@@ -151,15 +152,25 @@ type Code =
       | ClassDef(s,ms) -> 
         let mss = ms |> List.map (fun m -> m.AsJava (pre + "  "))
         let is = ms |> List.filter (function Implementation _ -> true | _ -> false)
-        match is with
-        | [] ->
-          let res = sprintf "class %s {\n%s%s}\n" s (!+mss) pre
-          res
-        | _ -> 
-          let isNames = is |> List.map (function Implementation i -> i | _ -> failwith "Invalid interface") 
-                           |> List.reduce (fun a b -> a + ", " + b)
-          let res = sprintf "class %s implements %s {\n%s%s}\n" s isNames (!+mss) pre
-          res
+        let es = ms |> List.filter (function Inheritance _ -> true | _ -> false)
+        let classHeader = sprintf "class %s" s
+        let classHeader = 
+          match is with
+          | [] ->
+            classHeader
+          | _ -> 
+            let isNames = is |> List.map (function Implementation i -> i | _ -> failwith "Invalid interface") 
+                             |> List.reduce (fun a b -> a + ", " + b)
+            sprintf "%s implements %s" classHeader isNames
+        let classHeader = 
+          match es with
+          | [] ->
+            classHeader
+          | _ -> 
+            let esNames = es |> List.map (function Inheritance i -> i | _ -> failwith "Invalid inheritance") 
+                             |> List.reduce (fun a b -> a + ", " + b)
+            sprintf "%s extends %s" classHeader esNames
+        sprintf "%s {\n%s%s}\n" classHeader (!+mss) pre
       | Return c ->
         sprintf "%sreturn %s;\n" pre ((c.AsJava "").TrimEnd[|','; '\n'; ';'|])
       | TypedDecl(s,t,Option.None) -> 
@@ -241,24 +252,33 @@ type Code =
       | End -> ""
       | None -> "null"
       | Dots -> "...\n"
-      | Implementation i -> 
-        ""
+      | Implementation i | Inheritance i -> ""
       | InterfaceDef(s,ms) ->
         let mss = ms |> List.map (fun m -> m.AsCSharp (pre + "  "))
         let res = sprintf "interface %s {\n%s%s}\n" s (!+mss) pre
         res        
       | ClassDef(s,ms) -> 
-        let mss = ms |> List.map (fun m -> m.AsCSharp (pre + "  "))
+        let mss = ms |> List.map (fun m -> m.AsJava (pre + "  "))
         let is = ms |> List.filter (function Implementation _ -> true | _ -> false)
-        match is with
-        | [] ->
-          let res = sprintf "class %s {\n%s%s}\n" s (!+mss) pre
-          res
-        | _ -> 
-          let isNames = is |> List.map (function Implementation i -> i | _ -> failwith "Invalid interface") 
-                           |> List.reduce (fun a b -> a + ", " + b)
-          let res = sprintf "class %s : %s {\n%s%s}\n" s isNames (!+mss) pre
-          res
+        let es = ms |> List.filter (function Inheritance _ -> true | _ -> false)
+        let classHeader = sprintf "class %s" s
+        let classHeader = 
+          match is with
+          | [] ->
+            classHeader
+          | _ -> 
+            let isNames = is |> List.map (function Implementation i -> i | _ -> failwith "Invalid interface") 
+                             |> List.reduce (fun a b -> a + ", " + b)
+            sprintf "%s : %s" classHeader isNames
+        let classHeader = 
+          match es with
+          | [] ->
+            classHeader
+          | _ -> 
+            let esNames = es |> List.map (function Inheritance i -> i | _ -> failwith "Invalid inheritance") 
+                             |> List.reduce (fun a b -> a + ", " + b)
+            sprintf "%s : %s" classHeader esNames
+        sprintf "%s {\n%s%s}\n" classHeader (!+mss) pre
       | Return c ->
         sprintf "%sreturn %s;\n" pre ((c.AsCSharp "").TrimEnd[|','; '\n'; ';'|])
       | TypedDecl(s,t,Option.None) -> 
@@ -331,6 +351,7 @@ let makeStatic c = Static(c)
 let makePublic c = Public(c)
 let makePrivate c = Private(c)
 let implements i = Implementation(i)
+let extends i = Inheritance(i)
 let interfaceDef c m = InterfaceDef(c,m)
 let classDef c m = ClassDef(c,m)
 let (:=) x y = Assign(x,y)

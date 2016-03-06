@@ -236,7 +236,14 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
     | Implementation i -> return None
     | ClassDef (n,ms) as cls ->
       let! pc = getPC
-      let allMethods = ms |> List.filter (function Implementation _ -> false | _ -> true)
+      let! s = getState
+      let allMethods = ms |> List.filter (function Implementation _ -> false | Inheritance _ -> false | _ -> true)
+      let allBaseMethods = 
+        let baseClasses = 
+          ms |> List.filter (function Inheritance _ -> true | _ -> false)
+             |> List.map (function Inheritance i -> i,s.Classes.[i] | _ -> failwith "Malformed inheritance declaration.")
+             |> List.map (function (i,Object(o)) -> [ for x in o |> Map.remove i do yield x.Key, x.Value ] | _ -> failwith "Malformed inheritance declaration.")
+        baseClasses |> List.fold (@) []
       let allMethodsWithThis =
          allMethods |> List.map (fun f -> match f with 
                                           | TypedDef(m,args,t,b) | Public(TypedDef(m,args,t,b)) | Private(TypedDef(m,args,t,b)) -> 
@@ -254,7 +261,7 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
                                                   | TypedDef(m,args,t,b) -> 
                                                     m,makeArrowType n m args t
                                                   | _ -> failwith "Malformed method declaration")
-      do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object((fields @ allMethodsUnchecked) |> Map.ofList)))) })
+      do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object((fields @ allMethodsUnchecked @ allBaseMethods) |> Map.ofList)))) })
       let! s = getState
       do! incrPC
       let rec typeCheckMethods ms = 
@@ -286,7 +293,7 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
               | _ ->
                 yield f,ArrowType(args,ret)
             | _ -> ()
-        ] |> Map.ofList
+        ] @ allBaseMethods |> Map.ofList
       do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object(msValsByName)))) })
       let nl = cls |> numberOfLines
       do! changePC (fun _ -> pc + (nl - 1))
