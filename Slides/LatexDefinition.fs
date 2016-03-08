@@ -15,6 +15,7 @@ let rec skipEveryThree =
 
 type LatexElement = 
   | Section of string 
+  | Image of string * float
   | Advanced of LatexElement
   | SubSection of string 
   | Paragraph of string 
@@ -167,6 +168,9 @@ type LatexElement =
       | Question q -> 
           sprintf @"%s\textit{%s}%s" beginExampleBlock q endExampleBlock, []
       | InlineCode c -> sprintf @"\texttt{%s}" c, []
+      | Image(image, scale) ->
+          
+          sprintf @"\includegraphics[scale=%s]{%s}" (string scale) image, []
       | Text t -> t, []
       | Tiny -> sprintf "\\tiny\n", []
       | Small -> sprintf "\\small\n", []
