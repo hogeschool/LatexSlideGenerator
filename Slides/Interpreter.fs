@@ -135,7 +135,8 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
     | Call("print",[arg]) ->
       let! argVal = interpret arg
       do! changeState (fun s -> { s with OutputStream = (argVal |> toString) :: s.OutputStream })
-      let! s = getState
+      do! pause
+      do! changeState (fun s -> { s with OutputStream = s.OutputStream.Tail })
       return None
     | Call(f,argExprs) ->
       let! argVals = argExprs |> mapCo interpret
@@ -216,6 +217,10 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
           | _ ->
             pause
       return! interpret k
+    | InlineSequence (p,k) ->
+      let! _ = interpret p
+      do! pause
+      return! interpret k
     | End -> 
       let! s = getState
       return None
@@ -272,7 +277,20 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
             | _ -> 
               m_pc <- m_pc + 1
         ] @ allBaseMethods |> Map.ofList
-      do! setState { s with Heap = (s.Heap |> Map.add n (Hidden(Object(msValsByName |> Map.add "__name" (ConstString n))))) }
+      let msValsByNameWithConsReturningThis =
+        let rec filter_end_and_add_return_this sequence =
+          match sequence with
+          | Sequence(_expr, End) -> InlineSequence(_expr, Return(var"this"))
+          | End -> Return(var"this")
+          | Sequence(_expr1, _expr2) -> Sequence(_expr1, filter_end_and_add_return_this _expr2)
+          | _expr -> InlineSequence(_expr, Return(var"this"))
+
+        match msValsByName |> Map.tryFind n with
+        | Some(ConstLambda(consPC,consArgs,consBody)) ->
+          msValsByName |> Map.add n (ConstLambda(consPC,consArgs, filter_end_and_add_return_this consBody))
+        | _ -> 
+          msValsByName
+      do! setState { s with Heap = (s.Heap |> Map.add n (Hidden(Object(msValsByNameWithConsReturningThis |> Map.add "__name" (ConstString n))))) }
       let nl = cls |> numberOfLines
       do! changePC ((+) (nl - 1))
       return None
@@ -280,8 +298,9 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
       return! interpret (StaticMethodCall("Program","Main",[None]))
     | StaticMethodCall("Console","WriteLine",[arg]) ->
       let! argVal = interpret arg
-      let! s = getState
-      do! setState { s with OutputStream = (argVal |> toString) :: s.OutputStream }
+      do! changeState (fun s -> { s with OutputStream = (argVal |> toString) :: s.OutputStream })
+//      do! pause
+//      do! changeState (fun s -> { s with OutputStream = s.OutputStream.Tail })
       return None
     | StaticMethodCall("Console","ReadLine",[]) ->
       let! s = getState

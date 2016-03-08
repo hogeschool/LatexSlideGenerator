@@ -23,6 +23,7 @@ type LatexElement =
   | InlineCode of string
   | Text of string
   | Block of LatexElement
+  | BlockWithTitle of string * LatexElement
   | Items of List<LatexElement>
   | PythonCodeBlock of TextSize * Code
   | LambdaCodeBlock of TextSize * Term * showTypes:bool
@@ -35,6 +36,7 @@ type LatexElement =
   | Large
   | TypingRules of List<TypingRule>
   | VerticalStack of List<LatexElement>
+  
   | PythonStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpStateTrace of TextSize * Code * RuntimeState<Code>
   | CSharpTypeTrace of TextSize * Code * TypeCheckingState<Code> * showMethodsTypeChecking:bool
@@ -145,8 +147,11 @@ type LatexElement =
         let stackTraceTables = 
           [ for st in stackTraces do 
             let stack,heap,input,output = st.AsSlideContent Dots (function Code.Hidden _ -> true | _ -> false) (fun c -> c.AsCSharp)
+
             let input = if input = "" then "" else "Input: " + input + @"\\"
-            let output = if output = "" then "" else "Output: " + output + @"\\"
+            let output = 
+              if output = "" then "" 
+              else "Output: " + output + @"\\"
             let heap = if heap = "" then "" else heapLabel + heap + @"\\"
             let slide = sprintf @"\item {%s %s%s\\%s%s%s}" textSize stackLabel stack heap input output
             yield slide ]
@@ -167,6 +172,9 @@ type LatexElement =
       | Small -> sprintf "\\small\n", []
       | Normal -> sprintf "\\normal\n", []
       | Large -> sprintf "\\large\n", []
+      | BlockWithTitle(title,t) ->
+        let ts,k = t.ToStringAsElement()
+        sprintf @"%s%s%s" (beginBlockWithTitle title) ts endExampleBlock, k
       | Block t ->
         let ts,k = t.ToStringAsElement()
         sprintf @"%s%s%s" beginExampleBlock ts endExampleBlock, k
@@ -335,6 +343,7 @@ and TypingRule =
 let (!) = Text
 let (!!) = InlineCode
 let ItemsBlock l = l |> Items |> Block 
+let ItemsBlockWithTitle t l = BlockWithTitle(t, l |> Items)
 let TextBlock l = l |> Text |> Block 
 
 let rec generatePresentation author title (slides:List<LatexElement>) =

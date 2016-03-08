@@ -67,6 +67,7 @@ type Code =
   | While of Code * Code
   | Op of Code * Operator * Code
   | Sequence of Code * Code
+  | InlineSequence of Code * Code
   with 
     member this.AsPython pre = 
       match this with

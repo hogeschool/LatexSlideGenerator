@@ -184,6 +184,11 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
               else 
                 { s with Variables = (s.Variables.Head |> Map.add v (typeFromName t)) :: s.Variables.Tail })
       return None
+    | Sequence (ClassDef(name, body),k) ->
+      let! _ = typeCheck (ClassDef(name, body))
+      do! pause
+      do! incrPC
+      return! typeCheck k
     | Sequence (p,k) ->
       let! _ = typeCheck p
       do! incrPC
@@ -297,6 +302,7 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
       do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object(msValsByName)))) })
       let nl = cls |> numberOfLines
       do! changePC (fun _ -> pc + (nl - 1))
+      let! s = getState
       return None
     | TypedDef(f,args,t,body) -> 
       let! pc = getPC
@@ -377,6 +383,8 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
 //      match argType with
 //      | StringType -> return VoidType
 //      | _ -> return failwithf "Wrong argument type %s for console.writeline" (argType.AsCSharp "")
+    | StaticMethodCall("Math","Sqrt",[arg]) ->
+      return FloatType
     | StaticMethodCall("Console","ReadLine",[]) ->
       return StringType
     | StaticMethodCall("Int32","Parse",[i]) ->
