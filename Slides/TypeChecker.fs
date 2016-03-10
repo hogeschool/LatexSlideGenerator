@@ -162,6 +162,8 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
       return IntType
     | ConstFloat f ->
       return FloatType
+    | ConstBool b ->
+      return BoolType
     | ConstString s ->
       return StringType
     | Assign (v,e) ->
@@ -188,6 +190,7 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
       let! _ = typeCheck (ClassDef(name, body))
       do! pause
       do! incrPC
+      
       return! typeCheck k
     | Sequence (p,k) ->
       let! _ = typeCheck p
