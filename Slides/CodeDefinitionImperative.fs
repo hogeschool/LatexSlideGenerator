@@ -38,12 +38,22 @@ type Code =
   | Ref of string
   | Object of Map<string, Code>
   | New of string * List<Code>
+  | GenericNew of string * List<string> * List<Code>
+  | NewArray of string * int
   | Implementation of string
   | Inheritance of string
+  | GenericInterfaceDef of List<string> * string * List<Code>
   | InterfaceDef of string * List<Code>
   | ClassDef of string * List<Code>
+  | GenericClassDef of List<string> * string * List<Code>
+  | GenericLambdaFuncDecl of i_t:string * o_t:string * v_name:string * arg_name:string * body:Code
+  | GenericLambdaFuncCall of v_name:string * arg:Code
   | Return of Code
   | TypedDecl of string * string * Option<Code>
+  | GenericTypedDecl of List<string> * string * string * Option<Code>
+  | ArrayDecl of string * string * Option<Code>
+  | ArraySet of string * int * Code
+  | ArrayGet of string * int
   | Var of string
   | Hidden of Code
   | ConstLambda of int * List<string> * Code
@@ -354,16 +364,28 @@ let makePrivate c = Private(c)
 let implements i = Implementation(i)
 let extends i = Inheritance(i)
 let interfaceDef c m = InterfaceDef(c,m)
+let genericInterfaceDef args c m = GenericInterfaceDef(args,c,m)
 let classDef c m = ClassDef(c,m)
+let genericClassDef args c m = GenericClassDef(args,c,m)
 let (:=) x y = Assign(x,y)
 let newC c a = New(c,a)
+let genericNewC c args a = GenericNew(c,args,a)
 let constBool x = ConstBool(x)
 let constInt x = ConstInt(x)
 let constFloat x = ConstFloat(x)
 let constString x = ConstString(x)
 let dots = Dots
+let genericLambdaFuncDecl i_t o_t v_name arg body = GenericLambdaFuncDecl(i_t,o_t,v_name,arg,body)
+let genericLambdaFuncCall f arg = GenericLambdaFuncCall(f,arg)
+let genericTypedDecl args x t = GenericTypedDecl(args,x,t,Option.None)
+let genericTypedDeclAndInit args x t c = GenericTypedDecl(args,x,t,Some c)
 let typedDecl x t = TypedDecl(x,t,Option.None)
 let typedDeclAndInit x t c = TypedDecl(x,t,Some c)
+let arrayDecl x t = ArrayDecl(x,t,Option.None)
+let arrayDeclAndInit x t c = ArrayDecl(x,t,Some c)
+let arraySet x i c = ArraySet(x,i,c)
+let arrayGet x i = ArrayGet(x,i)
+let newArray t n = NewArray(t,n)
 let var x = Var(x)
 let ret x = Return(x)
 let def x l b = Def(x,l,b)
