@@ -37,6 +37,7 @@ type Code =
   | None
   | Ref of string
   | Object of Map<string, Code>
+  | Array of Map<int,Code>
   | New of string * List<Code>
   | GenericNew of string * List<string> * List<Code>
   | NewArray of string * int
@@ -47,7 +48,7 @@ type Code =
   | ClassDef of string * List<Code>
   | GenericClassDef of List<string> * string * List<Code>
   | GenericLambdaFuncDecl of i_t:string * o_t:string * v_name:string * arg_name:string * body:Code
-  | GenericLambdaFuncCall of v_name:string * arg:Code
+  | GenericLambdaFuncCall of v_name:string * args:List<Code>
   | Return of Code
   | TypedDecl of string * string * Option<Code>
   | GenericTypedDecl of List<string> * string * string * Option<Code>
@@ -63,6 +64,7 @@ type Code =
   | ConstString of string
   | IntType | FloatType | StringType | BoolType | VoidType
   | ClassType of string
+  | GenericClassType of string * List<string>
   | ArrowType of List<Code> * Code
   | Assign of string * Code
   | TypedDef of string * List<string * string> * string * Code
@@ -156,10 +158,16 @@ type Code =
       | None -> "null"
       | Dots -> "...\n"
       | Implementation i | Inheritance i -> ""
+      | GenericInterfaceDef(args,s,ms) ->
+        let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
+        InterfaceDef(s + args_suffix,ms).AsJava pre
       | InterfaceDef(s,ms) ->
         let mss = ms |> List.map (fun m -> m.AsJava (pre + "  "))
         let res = sprintf "interface %s {\n%s%s}\n" s (!+mss) pre
         res        
+      | GenericClassDef(args,s,ms) ->
+        let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
+        ClassDef(s + args_suffix,ms).AsJava pre
       | ClassDef(s,ms) -> 
         let mss = ms |> List.map (fun m -> m.AsJava (pre + "  "))
         let is = ms |> List.filter (function Implementation _ -> true | _ -> false)
@@ -184,6 +192,9 @@ type Code =
         sprintf "%s {\n%s%s}\n" classHeader (!+mss) pre
       | Return c ->
         sprintf "%sreturn %s;\n" pre ((c.AsJava "").TrimEnd[|','; '\n'; ';'|])
+      | GenericTypedDecl(args, v, t, c) ->
+        let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
+        TypedDecl(v,t + args_suffix,c).AsJava pre
       | TypedDecl(s,t,Option.None) -> 
         if t = "" then sprintf "%s%s;\n" pre s
         else sprintf "%s%s %s;\n" pre (toJavaType t) s
@@ -207,6 +218,9 @@ type Code =
         let argss = args |> List.map (fun (t,a) -> (toJavaType t) + " " + a + ",")
         (if t = "" then sprintf "%s%s(%s) {\n%s%s}\n" pre n
          else sprintf "%s%s %s(%s) {\n%s%s}\n" pre t n) ((!+argss).TrimEnd[|','; '\n'|]) (body.AsJava (pre + "  ")) pre
+      | GenericNew(c,t_args,args) ->
+        let args_suffix = sprintf "<%s>" (t_args |> List.reduce (fun a b -> a + ", " + b))
+        New(c + args_suffix, args).AsJava pre
       | New(c,args) ->
         let argss = args |> List.map (fun a -> ((a.AsJava "").TrimEnd[|','; '\n'; ';'|]) + ",")
         sprintf "%snew %s(%s);\n" pre c ((!+argss).TrimEnd[|','; '\n'; ';'|])
@@ -234,6 +248,18 @@ type Code =
       | Sequence (p,q) ->
         sprintf "%s%s" (p.AsJava pre) (q.AsJava pre)
       | Hidden(_) -> ""
+      | ArraySet(x,i,e) -> 
+        sprintf "%s%s[%d] = %s;\n" pre x i (e.AsJava "")
+      | ArrayGet(x,i) -> 
+        sprintf "%s%s[%d];\n" pre x i
+      | ArrayDecl(x,t,Option.None) ->
+        sprintf "%s%s[] %s;\n" pre (toJavaType t) x
+      | ArrayDecl(x,t,Some c) ->
+        sprintf "%s%s[] %s = %s;\n" pre (toJavaType t) x (c.AsJava "")
+      | NewArray(t,n) ->
+        sprintf "%snew %s[%d]" pre (toJavaType t) n
+      | GenericLambdaFuncCall(_) | GenericLambdaFuncDecl(_) -> 
+        "Error: unsupported lambda functions in Java pretty printer"
       | s -> failwithf "Unsupported Java statement %A" s
     member this.NumberOfJavaLines = 
       let code = ((this.AsJava ""):string).TrimEnd([|'\n'|])
@@ -242,6 +268,9 @@ type Code =
 
     member this.AsCSharp pre = 
       match this with
+      | GenericClassType(c,args) ->
+        let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
+        sprintf "%s%s%s" pre c args_suffix
       | ClassType c -> sprintf "%s%s" pre c
       | VoidType -> sprintf "%svoid" pre
       | BoolType -> sprintf "%sbool" pre
@@ -264,10 +293,16 @@ type Code =
       | None -> "null"
       | Dots -> "...\n"
       | Implementation i | Inheritance i -> ""
+      | GenericInterfaceDef(args,s,ms) ->
+        let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
+        InterfaceDef(s + args_suffix,ms).AsCSharp pre
       | InterfaceDef(s,ms) ->
         let mss = ms |> List.map (fun m -> m.AsCSharp (pre + "  "))
         let res = sprintf "interface %s {\n%s%s}\n" s (!+mss) pre
-        res        
+        res
+      | GenericClassDef(args,s,ms) ->
+        let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
+        ClassDef(s + args_suffix,ms).AsCSharp pre
       | ClassDef(s,ms) -> 
         let mss = ms |> List.map (fun m -> m.AsJava (pre + "  "))
         let is = ms |> List.filter (function Implementation _ -> true | _ -> false)
@@ -292,6 +327,9 @@ type Code =
         sprintf "%s {\n%s%s}\n" classHeader (!+mss) pre
       | Return c ->
         sprintf "%sreturn %s;\n" pre ((c.AsCSharp "").TrimEnd[|','; '\n'; ';'|])
+      | GenericTypedDecl(args, v, t, c) ->
+        let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
+        TypedDecl(v,t + args_suffix,c).AsCSharp pre
       | TypedDecl(s,t,Option.None) -> 
         if t = "" then sprintf "%s%s;\n" pre s
         else sprintf "%s%s %s;\n" pre t s
@@ -315,9 +353,15 @@ type Code =
         let argss = args |> List.map (fun (t,a) -> t + " " + a + ",")
         (if t = "" then sprintf "%s%s(%s) {\n%s%s}\n" pre n
          else sprintf "%s%s %s(%s) {\n%s%s}\n" pre t n) ((!+argss).TrimEnd[|','; '\n'|]) (body.AsCSharp (pre + "  ")) pre
+      | GenericNew(c,t_args,args) ->
+        let args_suffix = sprintf "<%s>" (t_args |> List.reduce (fun a b -> a + ", " + b))
+        New(c + args_suffix, args).AsCSharp pre
       | New(c,args) ->
         let argss = args |> List.map (fun a -> ((a.AsCSharp "").TrimEnd[|','; '\n'; ';'|]) + ",")
         sprintf "%snew %s(%s);\n" pre c ((!+argss).TrimEnd[|','; '\n'; ';'|])
+      | GenericLambdaFuncCall(v_name, args) ->
+        let argss = args |> List.map (fun a -> ((a.AsCSharp "").TrimEnd[|','; '\n'; ';'|]) + ",")
+        sprintf "%s%s(%s);\n" pre v_name ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | Call(n,args) ->
         let argss = args |> List.map (fun a -> ((a.AsCSharp "").TrimEnd[|','; '\n'; ';'|]) + ",")
         sprintf "%s%s(%s);\n" pre n ((!+argss).TrimEnd[|','; '\n'; ';'|])
@@ -347,6 +391,22 @@ type Code =
         else
           let argNames = args |> List.map (fun arg -> arg.AsCSharp "") |> List.reduce (fun a b -> a + @"$\times$" + b)
           sprintf @"%s(%s) $\rightarrow$ %s" pre argNames (ret.AsCSharp "")
+      | ArrayDecl(x,t,Option.None) ->
+        sprintf "%s%s[] %s;\n" pre t x
+      | ArrayDecl(x,t,Some c) ->
+        sprintf "%s%s[] %s = %s;\n" pre t x (c.AsCSharp "")
+      | NewArray(t,n) ->
+        sprintf "%snew %s[%d]" pre (toJavaType t) n
+      | ArraySet(x,i,e) -> 
+        sprintf "%s%s[%d] = %s;\n" pre x i (e.AsCSharp "")
+      | ArrayGet(x,i) -> 
+        sprintf "%s%s[%d];\n" pre x i
+      | Array(vs) ->
+        let vs_s = 
+          [ for v in vs do yield (v.Value.AsCSharp "").Replace("\n","").Replace(";","")] |> List.reduce (fun a b -> a + " ;" + b)
+        sprintf "%s[%s]" pre vs_s
+      | GenericLambdaFuncDecl(i_t:string, o_t:string, v_name:string, arg_name:string, Return(res)) ->
+        sprintf "%sFunc<%s,%s> %s = %s => %s;\n" pre i_t o_t v_name arg_name (res.AsCSharp "")
       | s -> failwithf "Unsupported C# statement %A" s
     member this.NumberOfCSharpLines = 
       let code = ((this.AsCSharp ""):string).TrimEnd([|'\n'|])

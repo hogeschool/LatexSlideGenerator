@@ -354,6 +354,7 @@ let rec generatePresentation author title (slides:List<LatexElement>) =
   @"\documentclass{beamer}
 \usetheme[hideothersubsections]{HRTheme}
 \usepackage{beamerthemeHRTheme}
+\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{graphicx}
 \usepackage[space]{grffile}
