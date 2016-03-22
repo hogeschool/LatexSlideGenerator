@@ -372,7 +372,7 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
         | Hidden(Object(bs))
         | Object(bs) as o ->
           match bs.["__type"] with
-          | Ref(c_name) ->
+          | ClassType(c_name) ->
             match s.Heap.[c_name] with
             | Hidden(Object(ms)) | Object(ms) ->
               match ms.["__name"] with
@@ -392,7 +392,7 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
       | Object(ms) as o ->
         let fields = ms |> Seq.filter (fun x -> match x.Value with | ConstLambda(_) | Hidden(ConstLambda(_)) -> false | _ -> x.Key.StartsWith("__") |> not) 
                         |> Seq.map (fun x -> x.Key,Hidden(None)) |> Map.ofSeq
-        let self = Object (fields |> Map.add "__type" (Ref c))
+        let self = Object (fields |> Map.add "__type" (ClassType c))
         let self_ref_id = s.HeapSize.ToString()
         let self_ref = Ref self_ref_id
         do! setState { s with Stack = s.Stack; Heap = s.Heap |> Map.add self_ref_id self; HeapSize = s.HeapSize + 1 }

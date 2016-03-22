@@ -25,6 +25,13 @@ let toJavaType =
   | "string" -> "String"
   | t -> t
 
+let toTypeAsArgument =
+  function
+  | "int" -> "Integer"
+  | "bool" -> "Boolean"
+  | "float" -> "Float"
+  | t -> t |> toJavaType
+
 let (!+) = List.fold (+) ""
 
 type Code =
@@ -84,7 +91,7 @@ type Code =
     member this.AsPython pre = 
       match this with
       | Object bs ->
-        let argss = bs |> Map.remove "__type" |> Seq.map (fun a -> a.Key + "=" + (a.Value.AsPython "") + ", ") |> Seq.toList
+        let argss = bs |> Seq.map (fun a -> a.Key.Replace("__", "\_\_") + "=" + (a.Value.AsPython "") + ", ") |> Seq.toList
         sprintf "%s%s" pre ((!+argss).TrimEnd[|','; ' '|])
       | End -> ""
       | None -> "None"
@@ -151,7 +158,7 @@ type Code =
       | ToString p ->
         (sprintf "%s%s.toString()" pre (p.AsJava ""))
       | Object bs ->
-        let argss = bs |> Map.remove "__type" |> Seq.map (fun a -> a.Key + "=" + (a.Value.AsJava "") + ", ") |> Seq.toList
+        let argss = bs |> Seq.map (fun a -> a.Key.Replace("__", "\_\_") + "=" + (a.Value.AsJava "") + ", ") |> Seq.toList
         sprintf "%s%s" pre ((!+argss).TrimEnd[|','; ' '|])
       | MainCall -> ""
       | End -> ""
@@ -193,7 +200,7 @@ type Code =
       | Return c ->
         sprintf "%sreturn %s;\n" pre ((c.AsJava "").TrimEnd[|','; '\n'; ';'|])
       | GenericTypedDecl(args, v, t, c) ->
-        let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
+        let args_suffix = sprintf "<%s>" (args |> List.map toTypeAsArgument |> List.reduce (fun a b -> a + ", " + b))
         TypedDecl(v,t + args_suffix,c).AsJava pre
       | TypedDecl(s,t,Option.None) -> 
         if t = "" then sprintf "%s%s;\n" pre s
@@ -219,7 +226,7 @@ type Code =
         (if t = "" then sprintf "%s%s(%s) {\n%s%s}\n" pre n
          else sprintf "%s%s %s(%s) {\n%s%s}\n" pre t n) ((!+argss).TrimEnd[|','; '\n'|]) (body.AsJava (pre + "  ")) pre
       | GenericNew(c,t_args,args) ->
-        let args_suffix = sprintf "<%s>" (t_args |> List.reduce (fun a b -> a + ", " + b))
+        let args_suffix = sprintf "<%s>" (t_args |> List.map toTypeAsArgument |> List.reduce (fun a b -> a + ", " + b))
         New(c + args_suffix, args).AsJava pre
       | New(c,args) ->
         let argss = args |> List.map (fun a -> ((a.AsJava "").TrimEnd[|','; '\n'; ';'|]) + ",")
@@ -286,7 +293,7 @@ type Code =
       | ToString p ->
         (sprintf "%s%s.ToString()" pre (p.AsCSharp ""))
       | Object bs ->
-        let argss = bs |> Map.remove "__type" |> Seq.map (fun a -> a.Key + @"=" + (a.Value.AsCSharp "") + @" \\") |> Seq.toList
+        let argss = bs |> Seq.map (fun a -> a.Key.Replace("__", "\_\_") + @"=" + (a.Value.AsCSharp "") + @" \\") |> Seq.toList
         sprintf @"%s\begin{tabular}{c} %s \end{tabular}" pre ((!+argss).TrimEnd[|','; ' '; '\\'|])
       | MainCall -> ""
       | End -> ""
