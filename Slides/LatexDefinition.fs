@@ -21,7 +21,10 @@ type LatexElement =
   | Paragraph of string 
   | Pause
   | Question of string
+  | Figure of string * float
   | InlineCode of string
+  | InLineCodeResized of TextSize * string
+  | GenericCodeBlock of TextSize * bool * string
   | Text of string
   | Block of LatexElement
   | BlockWithTitle of string * LatexElement
@@ -29,6 +32,7 @@ type LatexElement =
   | PythonCodeBlock of TextSize * Code
   | LambdaCodeBlock of TextSize * Term * showTypes:bool
   | FSharpCodeBlock of TextSize * Term * showTypes:bool
+  | HaskellCodeBlock of TextSize * Term * showTypes:bool
   | CSharpCodeBlock of TextSize * Code
   | Unrepeated of LatexElement
   | Tiny
@@ -55,7 +59,12 @@ type LatexElement =
       | Pause -> @""
       | Question q -> 
           sprintf @"\textit{%s}" q
+      | Figure(path,scale) ->
+          sprintf "\\begin{figure}\n\\includegraphics[scale=%f]{%s}\n\\end{figure}" scale path
       | InlineCode c -> sprintf @"\texttt{%s}" c
+      | InLineCodeResized(size,c) -> sprintf @"%s\texttt{%s}" (size.ToString()) c
+      | GenericCodeBlock(size,showLines,c) ->
+          sprintf "\\lstset{showstringspaces=false}\\lstset{basicstyle=\\ttfamily%s}%s\\begin{lstlisting}\n%s\n\\end{lstlisting}" (size.ToString()) (if showLines then "" else "\\lstset{numbers=none}") c
       | Text t -> t
       | Tiny -> sprintf "\\tiny\n"
       | Small -> sprintf "\\small\n"
@@ -88,6 +97,9 @@ type LatexElement =
       | FSharpCodeBlock (ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp (if showTypes then PrintTypes.TypedFSharp else PrintTypes.Untyped) "") endCode
+      | HaskellCodeBlock (ts, c , showTypes) ->
+          let textSize = ts.ToString()
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Haskell") (c.ToHaskell (if showTypes then PrintTypes.TypedFSharp else PrintTypes.Untyped) "") endCode
       | LambdaCodeBlock(ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Python") (c.ToLambda (if showTypes then PrintTypes.TypedLambda else PrintTypes.Untyped)) endCode
@@ -167,7 +179,11 @@ type LatexElement =
       | Pause -> @"\pause", []
       | Question q -> 
           sprintf @"%s\textit{%s}%s" beginExampleBlock q endExampleBlock, []
+      | Figure(path,scale) ->
+          sprintf "\\begin{figure}\n\\includegraphics[scale=%f]{%s}\n\\end{figure}" scale path, []
       | InlineCode c -> sprintf @"\texttt{%s}" c, []
+      | InLineCodeResized(size,c) -> sprintf @"%s\texttt{%s}" (size.ToString()) c, []
+      | GenericCodeBlock(size,showLines,c) -> sprintf "\\lstset{showstringspaces=false}\\lstset{basicstyle=\\ttfamily%s}%s\\begin{lstlisting}\n%s\n\\end{lstlisting}" (size.ToString()) (if showLines then "" else "\\lstset{numbers=none}") c, []
       | Image(image, scale) ->
           
           sprintf @"\includegraphics[scale=%s]{%s}" (string scale) image, []
@@ -193,6 +209,9 @@ type LatexElement =
       | FSharpCodeBlock (ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToFSharp (if showTypes then PrintTypes.TypedFSharp else PrintTypes.Untyped) "") endCode, []
+      | HaskellCodeBlock (ts, c, showTypes) ->
+          let textSize = ts.ToString()
+          sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "Haskell") (c.ToHaskell (if showTypes then PrintTypes.TypedFSharp else PrintTypes.Untyped) "") endCode, []
       | LambdaCodeBlock(ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s" textSize (beginCode "ML") (c.ToLambda (if showTypes then PrintTypes.TypedLambda else PrintTypes.Untyped)) endCode, []
@@ -230,8 +249,12 @@ type LatexElement =
       | Pause -> @"\pause"
       | Question q ->
         sprintf @"%s%s\textit{%s}%s%s" beginFrame beginExampleBlock q endExampleBlock endFrame
+      | Figure(path,scale) ->
+          sprintf "\\begin{figure}\n\\includegraphics[scale=%f]{%s}\n\\end{figure}" scale path
       | InlineCode c ->
           sprintf @"%s\texttt{%s}%s" (beginCode "Python") c endCode
+      | GenericCodeBlock(size,showLines,c) -> sprintf "\\lstset{showstringspaces=false}\\lstset{basicstyle=\\ttfamily%s}%s\\begin{lstlisting}\n%s\n\\end{lstlisting}" (size.ToString()) (if showLines then "" else "\\lstset{numbers=none}") c
+      | InLineCodeResized(size,c) -> sprintf @"%s\texttt{%s}" (size.ToString()) c
       | Text t -> t
       | Items items ->
         let items = items |> List.map (function | Pause -> @"\pause",[] | item -> let i,k = item.ToStringAsElement() in @"\item " + i + "\n", k)
@@ -244,6 +267,9 @@ type LatexElement =
       | FSharpCodeBlock (ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToFSharp (if showTypes then PrintTypes.TypedFSharp else PrintTypes.Untyped) "") endCode endFrame
+      | HaskellCodeBlock (ts, c, showTypes) ->
+          let textSize = ts.ToString()
+          sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "Haskell") (c.ToHaskell (if showTypes then PrintTypes.TypedFSharp else PrintTypes.Untyped) "") endCode endFrame
       | LambdaCodeBlock (ts, c, showTypes) ->
           let textSize = ts.ToString()
           sprintf @"%s\lstset{basicstyle=\ttfamily%s}\lstset{numbers=none}%s%s%s%s" beginFrame textSize (beginCode "ML") (c.ToLambda (if showTypes then PrintTypes.TypedLambda else PrintTypes.Untyped)) endCode endFrame

@@ -142,6 +142,7 @@ type Term =
   | MakeRecord of List<string * Term>
   | RecordWith of Term * List<string * Term>
   | MatchCustom of Term * List<string * List<string> * Term>
+  | HaskellFuncDef of string * Option<List<Term>> * List<Term>
   | Unit
   | Dot of Term * string
   | StringConst of string
@@ -442,6 +443,108 @@ type Term =
           sprintf "%s| %s -> %s" pre args (t.ToFSharp printTypes "")
         let cases = ps |> List.map makePattern |> List.reduce (fun a b -> a + "\n" + b)
         sprintf "%smatch %s with\n%s" pre (u.ToFSharp printTypes "") cases
+
+    member this.ToHaskellInner newLine (printTypes:PrintTypes) pre =
+      match this with
+      | TypeLambda(x,t) -> t.ToHaskellInner newLine printTypes pre
+      | Lambda(x,t) -> sprintf @"%s %s" (printTypes.PrintVar x) (t.ToHaskellInner newLine printTypes pre)
+      | Highlighted(Lambda(x,t),_) ->
+        Lambda(x,t).ToHaskellInner newLine printTypes pre
+      | _ -> 
+        let nl,pre = newLine (pre + "  ")
+        sprintf "-> %s%s" nl (this.ToHaskell printTypes pre)
+    member this.ToHaskell (printTypes:PrintTypes) pre =
+      match this with
+      | Unit -> "()"
+      | Type t -> 
+        printTypes.PrintType t
+      | TypeLet(t_n,t,u) -> 
+        sprintf "%s%s" (printTypes.PrintTypeDecl t_n t) (u.ToHaskell printTypes pre)
+      | TypeApplication(t,a) ->
+        sprintf "%s%s" pre (printTypes.PrintTypeApplication (t.ToHaskell printTypes "") a)
+      | TypeLambda(a,t) ->
+        sprintf "%s%s%s" pre (printTypes.PrintTypeLambda a) (t.ToHaskell printTypes "")
+      | Var s -> pre + s
+      | Hidden t -> sprintf @"..."
+      | Highlighted(t,_) -> t.ToHaskell printTypes pre
+      | Application(Application(And,t),u) -> sprintf "%s(%s && %s)" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
+      | Application(Application(Or,t),u) -> sprintf "%s(%s || %s)" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
+      | Application(Application(Plus,t),u) -> sprintf "%s(%s + %s)" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
+      | Application(Application(Minus,t),u) -> sprintf @"%s(%s - %s)" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
+      | Application(Application(Mult,t),u) -> sprintf "%s(%s * %s)" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
+      | Application(IsZero,t) -> sprintf @"%s(%s == 0)" pre (t.ToHaskell printTypes "")
+      | Application(Application(Application(If,c),t),e) -> sprintf "%sif %s then\n%s\n%selse\n%s\n" pre (c.ToHaskell printTypes "") (t.ToHaskell printTypes (pre + "  ")) pre (e.ToHaskell printTypes (pre + "  "))
+      | Application(Application(Var":",t),u) -> sprintf @"%s%s : %s" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
+      | Application(Application(MakePair,t),u) -> sprintf @"%s(%s, %s)" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
+      | Application(Application(Application(Match, t), Lambda(x,f)), (Lambda(y,g))) ->
+        let f' = f.replace (fst x) (Var"x")
+        let g' = g.replace (fst y) (Var"y")
+        sprintf "%scase %s of\n%s Left x ->\n %s\n%s Right y -> \n%s\n" pre (t.ToHaskell printTypes "") pre (f'.ToHaskell printTypes (pre + "  ")) pre (g'.ToHaskell printTypes (pre + "  "))
+      | Let(f_name,Lambda(x,t),u) ->
+        if t.Length < 10 then
+          sprintf "%slet %s = \n%s\\ %s %s in\n%s" pre (printTypes.PrintVar f_name) (pre + "  ") (printTypes.PrintVar x) (t.ToHaskellInner (fun pre -> "","") printTypes (pre + "  ")) (u.ToHaskell printTypes (pre))
+        else
+          sprintf "%slet %s = \n%s\\ %s %s in\n%s" pre (printTypes.PrintVar f_name) (pre + "  ") (printTypes.PrintVar x) (t.ToHaskellInner (fun pre -> "\n",pre) printTypes (pre + "  ")) (u.ToHaskell printTypes (pre))
+      | Let(f_name,Application(Fix,Lambda(f,Lambda(x,t))),u) ->
+        let t' = t.replace (printTypes.PrintVar f) (Var (printTypes.PrintVar f_name))
+        sprintf "%s%s = \n%s\\ %s %s\n%s" pre (printTypes.PrintVar f_name) (pre + "  ") (printTypes.PrintVar x) (t'.ToHaskellInner (fun pre -> "\n",pre) printTypes (pre + "  ")) (u.ToHaskell printTypes (pre))
+      | Application(t,u) -> sprintf "%s(%s %s)" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
+      | Lambda(x,t) -> 
+        if t.Length < 10 then
+          sprintf @"%s(\%s %s)" pre (printTypes.PrintVar x) (t.ToHaskellInner (fun pre -> "","") printTypes pre)
+        else
+          sprintf @"%s(\%s %s)" pre (printTypes.PrintVar x) (t.ToHaskellInner (fun pre -> "\n",pre) printTypes pre)
+      | Let(_bind,_expr,_in) -> 
+        if _expr.Length < 5 then
+          sprintf "%slet %s = %s in\n%s" pre (printTypes.PrintVar _bind) (_expr.ToHaskell printTypes "") (_in.ToHaskell printTypes pre)
+        else
+          sprintf "%slet %s = \n%s in\n%s" pre (printTypes.PrintVar _bind) (_expr.ToHaskell printTypes (pre + "  ")) (_in.ToHaskell printTypes pre)
+      | True -> sprintf "True"
+      | False -> sprintf "False"
+      | And -> sprintf "(&&)"
+      | Or -> sprintf "(||)"
+      | Not -> sprintf "not"
+      | Plus -> sprintf "(+)"
+      | Minus -> sprintf "(-)"
+      | Mult -> sprintf "(*)"
+      | IsZero -> sprintf "((=) 0)"
+      | If -> sprintf "if"
+      | Fix -> sprintf "letrec"
+      | MakePair -> sprintf "(,)"
+      | First -> sprintf "fst"
+      | Second -> sprintf "snd"
+      | Match -> sprintf @"case"
+      | Inl -> sprintf @"Left"
+      | Inr -> sprintf @"Right"
+      | StringConst(s) ->
+        sprintf @"""%s""" s
+      | Dot(r,f) ->
+        sprintf @"%s.%s" (r.ToHaskell printTypes pre) f
+      | HaskellFuncDef(fname, typeOpt, functions) ->
+          let typeDecl =
+            match typeOpt with
+            | None -> ""
+            | Some typeVars ->
+                sprintf "%s :: %s\n" fname (typeVars |> List.map(fun t -> t.ToHaskell printTypes "") |> List.reduce (fun a b -> a + "->" + b))
+          let funcDecls = (functions |> List.map(fun t -> fname + "=" + t.ToHaskell printTypes "") |> List.reduce (fun a b -> a + "\n" + b))
+          typeDecl + funcDecls
+      | MakeRecord(fs) ->
+        let decls = fs |> List.map (fun (n,t) -> sprintf "%s = %s" n (t.ToHaskell printTypes "")) |> List.reduce (fun a b -> a + ", " + b)
+        sprintf @"%s{ %s }" pre decls
+      | MatchCustom(u,ps) ->
+        let makeArgs (c:string) (a:List<string>) = 
+          let args =
+            match a with
+            | [] -> ""
+            | _ ->
+              sprintf @"(%s)" (a |> List.reduce (fun x y -> x + ", " + y))
+          sprintf "%s%s" c args
+        let makePattern ((c,a,t):string*List<string> * Term) =
+          let args = makeArgs c a
+          sprintf "%s %s -> %s" pre args (t.ToHaskell printTypes "")
+        let cases = ps |> List.map makePattern |> List.reduce (fun a b -> a + "\n" + b)
+        sprintf "%scase %s of\n%s" pre (u.ToHaskell printTypes "") cases
+
 
 and PrintTypes =
   { PrintVar : (string * Type) -> string;
