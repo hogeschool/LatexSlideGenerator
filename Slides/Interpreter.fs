@@ -120,7 +120,10 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
       let! s = getState
       match s.Stack with
       | c::rs ->
-        do! setState { s with Stack = (Map.empty |> Map.add "PC" c.["PC"] |> Map.add "ret" res) :: rs }
+        do! if c.ContainsKey "PC" then
+              setState { s with Stack = (Map.empty |> Map.add "PC" c.["PC"] |> Map.add "ret" res) :: rs }
+            else
+              setState { s with Stack = (Map.empty |> Map.add "ret" res) :: rs }
         do! pause
         do! setState { s with Stack = rs }
         return res
@@ -244,6 +247,8 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
       let nl = intf |> numberOfLines
       do! changePC ((+) (nl - 1))
       return None
+    | GenericClassDef(_,n,ms) ->
+      return! interpret(ClassDef(n,ms))
     | ClassDef (n,ms) as cls ->
       let! pc = getPC
       let! s = getState
@@ -314,6 +319,26 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
         return ConstInt(System.Int32.Parse(s))
       | _ -> 
         return failwithf "Cannot convert %s to an integer" (i |> toString)
+    | GenericLambdaFuncCall(f_name,argExprs) ->
+      let! argVals = argExprs |> mapCo interpret
+      let! s = getState
+      match lookup s f_name with
+      | Hidden(ConstLambda(pc,argNames,body))
+      | ConstLambda(pc,argNames,body) ->
+        let c = Seq.zip argNames argVals |> Map.ofSeq |> Map.add "ret" None
+        do! setState { s with Stack = c :: s.Stack }
+        do! pause
+        let! res = interpret body
+        match res with
+        | None -> // automatically returned, pop stack frame here
+          let! s = getState
+          do! setState { s with Stack = (Map.empty |> Map.add "PC" s.Stack.Head.["PC"] |> Map.add "ret" res) :: s.Stack.Tail }
+          do! pause
+          do! setState { s with Stack = s.Stack.Tail }
+          return res
+        | _ -> 
+          return res
+      | _ -> return failwithf "Cannot invoke %s as it is not a lambda function" f_name
     | StaticMethodCall(c,m,argExprs) ->
       let! s = getState
       match s.Heap.[c] with
@@ -347,7 +372,7 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
         | Hidden(Object(bs))
         | Object(bs) as o ->
           match bs.["__type"] with
-          | Ref(c_name) ->
+          | ClassType(c_name) ->
             match s.Heap.[c_name] with
             | Hidden(Object(ms)) | Object(ms) ->
               match ms.["__name"] with
@@ -358,6 +383,8 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
           | _ -> return failwith ""
         | _ -> return failwith ""
       | _ -> return failwith ""
+    | GenericNew(c,_,args) ->
+      return! interpret(New(c,args))
     | New(c,argExprs) ->
       let! s = getState
       match s.Heap.[c] with
@@ -365,7 +392,7 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
       | Object(ms) as o ->
         let fields = ms |> Seq.filter (fun x -> match x.Value with | ConstLambda(_) | Hidden(ConstLambda(_)) -> false | _ -> x.Key.StartsWith("__") |> not) 
                         |> Seq.map (fun x -> x.Key,Hidden(None)) |> Map.ofSeq
-        let self = Object (fields |> Map.add "__type" (Ref c))
+        let self = Object (fields |> Map.add "__type" (ClassType c))
         let self_ref_id = s.HeapSize.ToString()
         let self_ref = Ref self_ref_id
         do! setState { s with Stack = s.Stack; Heap = s.Heap |> Map.add self_ref_id self; HeapSize = s.HeapSize + 1 }
@@ -373,12 +400,52 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
         let! bodyRes = interpret (StaticMethodCall(c, consName c, self_ref :: argExprs))
         return self_ref
       | _ -> return failwithf "Cannot find class %s" c
+    | NewArray(t,n) -> 
+      let! s = getState
+      let self = Array([ for i = 0 to n-1 do yield i,Hidden(None) ] |> Map.ofList)
+      let self_ref_id = s.HeapSize.ToString()
+      let self_ref = Ref self_ref_id
+      do! setState { s with Stack = s.Stack; Heap = s.Heap |> Map.add self_ref_id self; HeapSize = s.HeapSize + 1 }
+      let! s_test = getState
+      do! pause
+      return self_ref
     | TypedDef(n,args,t,body) -> 
       return! interpret (Def(n,args |> List.map snd, body))
-    | TypedDecl(v,t,Option.None) ->
+    | GenericTypedDecl(_,v,t,c) ->
+      return! interpret (TypedDecl(v,t,c))
+    | ArrayDecl(v,t,Option.None) | TypedDecl(v,t,Option.None) ->
       return! interpret (Assign(v, Hidden(None)))
-    | TypedDecl(v,t,Some y) ->
+    | ArrayDecl(v,t,Some y) | TypedDecl(v,t,Some y) ->
       return! interpret (Assign(v, y))
+    | ArraySet(x,i,c) ->
+      let! c_value = interpret c
+      let! s = getState
+      match lookup s x with
+      | Ref(r) ->
+        match s.Heap.[r] with
+        | Array(vs) ->
+          let s1 = { s with Heap = s.Heap |> Map.add r (Array(vs |> Map.add i c_value)) }
+          do! setState s1
+          return None
+        | r ->
+          return failwithf "Lookup on %s returned no array" x
+      | _ ->
+        return failwithf "Lookup on %s returned no ref" x
+    | ArrayGet(x,i) ->
+      let! s = getState
+      match lookup s x with
+      | Ref(r) ->
+        match s.Heap.[r] with
+        | Array(vs) ->
+          return vs.[i]
+        | r ->
+          return failwithf "Lookup on %s returned no array" x
+      | t ->
+        return failwithf "Lookup on %s returned no array" x
+    | GenericLambdaFuncDecl(i_t:string, o_t:string, v_name:string, arg_name:string, body) ->
+      return! interpret (Assign(v_name, ConstLambda(-1, [arg_name], body)))
+    | ConstLambda _ as cl ->
+      return cl
     | c -> return failwithf "Unsupported construct %A" c
   }
 

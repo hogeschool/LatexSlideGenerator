@@ -19,10 +19,10 @@ let makeArrowType c m args t =
   let res = ArrowType(args |> List.map fst |> List.map typeFromName, retT)
   res
 
-type TypeCheckingState<'code> = { Variables : List<Map<string, 'code>>; PC : int; Classes : Map<string, 'code>; Errors : List<string> }
+type TypeCheckingState<'code> = { Variables : List<Map<string, 'code>>; PC : int; GenericClasses : Map<string, List<string> * 'code>; Classes : Map<string, 'code>; Errors : List<string> }
   with 
     static member Zero : TypeCheckingState<'code> =
-      { Variables = []; PC = 1; Classes = Map.empty; Errors = [] }
+      { Variables = []; PC = 1; GenericClasses = Map.empty; Classes = Map.empty; Errors = [] }
     member this.AsSlideContent dots isHidden toCode toString =
       let varTable = 
         let vars = 
@@ -50,9 +50,14 @@ type TypeCheckingState<'code> = { Variables : List<Map<string, 'code>>; PC : int
         sprintf "%s\n%s\n%s\n" (beginTabular hd) varTableContent endTabular
 
       let classes = 
-        if this.Classes |> Seq.filter (fun x -> isHidden x.Value |> not) |> Seq.isEmpty then ""
+        let inlineGenericArgs c_name (args,o) =
+          //let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
+          c_name, o
+        let allClasses = 
+          [ for x in this.GenericClasses do yield inlineGenericArgs x.Key x.Value ] @ [ for x in this.Classes do yield x.Key,x.Value ] |> Map.ofList
+        if allClasses |> Seq.filter (fun x -> isHidden x.Value |> not) |> Seq.isEmpty then ""
         else 
-          let classesNames,classesValues = Runtime.printBindings toString isHidden this.Classes
+          let classesNames,classesValues = Runtime.printBindings toString isHidden allClasses
           let hd = classesNames |> Seq.map (fun _ -> "c") |> Seq.toList
           let classesTableContent = sprintf "%s \\\\\n\\hline\n%s \\\\\n\\hline\n" classesNames classesValues
           sprintf "%s\n%s\n%s" (beginTabular hd) classesTableContent endTabular
@@ -61,9 +66,11 @@ type TypeCheckingState<'code> = { Variables : List<Map<string, 'code>>; PC : int
 
 
 let rec lookupInClass (s:TypeCheckingState<Code>) c (vs:List<string>) =
-  match s.Classes |> Map.tryFind c with
-  | Some(Object(ds))
-  | Some(Hidden(Object(ds))) ->
+  match s.Classes |> Map.tryFind c, s.GenericClasses |> Map.tryFind c with
+  | Some(Object(ds)),_
+  | Some(Hidden(Object(ds))),_
+  | _,Some(_,Object(ds))
+  | _,Some(_,Hidden(Object(ds))) ->
     match vs with
     | [] -> 
       failwith "Failed lookup on empty name"
@@ -96,8 +103,8 @@ let lookup (s:TypeCheckingState<Code>) (v:string) =
     | Some(ClassType c) ->
       lookupInClass s c vs
     | _ ->
-      match s.Classes |> Map.tryFind v with
-      | Some c ->
+      match s.Classes |> Map.tryFind v,s.GenericClasses |> Map.tryFind v with
+      | Some c,_ | _,Some (_,c) ->
         if vs.IsEmpty then
           c
         else
@@ -162,11 +169,19 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
       return IntType
     | ConstFloat f ->
       return FloatType
+    | ConstBool b ->
+      return BoolType
     | ConstString s ->
       return StringType
     | Assign (v,e) ->
-//      let! res = typeCheck e
-//      do! if v.Split([|'.'|]).Length > 1 then ret() else changeState (fun s -> store s v res)
+      return None
+    | GenericTypedDecl(args,v,t,_) ->
+      do! changeState 
+            (fun s -> 
+              if s.Variables.IsEmpty then
+                { s with Variables = [Map.empty |> Map.add v (GenericClassType(t,args))] }
+              else 
+                { s with Variables = (s.Variables.Head |> Map.add v (GenericClassType(t,args))) :: s.Variables.Tail })
       return None
     | TypedDecl(v,t,Option.None) ->
       do! changeState 
@@ -177,6 +192,7 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
                 { s with Variables = (s.Variables.Head |> Map.add v (typeFromName t)) :: s.Variables.Tail })
       return None
     | TypedDecl(v,t,Some y) ->
+      // should type check the right-hand-side
       do! changeState 
             (fun s -> 
               if s.Variables.IsEmpty then
@@ -188,6 +204,7 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
       let! _ = typeCheck (ClassDef(name, body))
       do! pause
       do! incrPC
+      
       return! typeCheck k
     | Sequence (p,k) ->
       let! _ = typeCheck p
@@ -239,6 +256,11 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
       do! changePC ((+) (nl - 1))
       return None
     | Implementation i -> return None
+    | GenericClassDef(args,n,m) ->
+      let! res = typeCheck (ClassDef(n,m))
+      do! changeState (fun s -> { s with Classes = s.Classes |> Map.remove n; 
+                                         GenericClasses = s.GenericClasses |> Map.add n (args,s.Classes.[n]) })
+      return res
     | ClassDef (n,ms) as cls ->
       let! pc = getPC
       let! s = getState

@@ -380,6 +380,7 @@ let rec generatePresentation author title (slides:List<LatexElement>) =
   @"\documentclass{beamer}
 \usetheme[hideothersubsections]{HRTheme}
 \usepackage{beamerthemeHRTheme}
+\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{graphicx}
 \usepackage[space]{grffile}
@@ -432,7 +433,9 @@ let rec generateDocument author title (elements:List<LatexElement>) =
 \textcolor{white}{#1}
 }
 \usepackage{listings}
+\usepackage[margin=0.5in]{geometry}
 \usepackage{tabularx}
+\usepackage{pdflscape}
 \lstset{language=C,
 basicstyle=\ttfamily\footnotesize,
 frame=single,
@@ -454,6 +457,7 @@ breaklines=true}
 
 \begin{document}
 \maketitle
+\begin{landscape}
 " + (elements |> List.map (fun x -> x.ToDocumentString()) |> List.fold (+) "") + @"
-
+\end{landscape}
 \end{document}"
