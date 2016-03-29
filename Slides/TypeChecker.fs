@@ -248,7 +248,9 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
           for m in ms do
             match m with
             | TypedSig(f,args,t) -> 
-              yield f,ArrowType(ClassType f :: (args |> List.map fst |> List.map typeFromName), typeFromName t)
+              let c = n
+              let a = 1
+              yield f,ArrowType(ClassType n :: (args |> List.map fst |> List.map typeFromName), typeFromName t)
             | _ -> ()
         ] |> Map.ofList
       do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object(msValsByName)))) })
@@ -308,8 +310,7 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
               return m :: ms_t
         }
       let! msVals = typeCheckMethods allMethodsWithThis
-      let msValsByName = 
-        fields @
+      let class_methods =
         [
           for m,m_orig in Seq.zip msVals allMethods do
             match m with
@@ -320,7 +321,11 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
               | _ ->
                 yield f,ArrowType(args,ret)
             | _ -> ()
-        ] @ allBaseMethods |> Map.ofList
+        ]
+      let filtered_base_methods = allBaseMethods 
+        //[for (m, code) in allBaseMethods do if class_methods |> List.exists(fun (m1, code1) -> m = m1) |> not then yield (m, code)]
+
+      let msValsByName = fields @ class_methods @ filtered_base_methods |> Map.ofList
       do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object(msValsByName)))) })
       let nl = cls |> numberOfLines
       do! changePC (fun _ -> pc + (nl - 1))

@@ -207,7 +207,10 @@ type Code =
         else sprintf "%s%s %s;\n" pre (toJavaType t) s
       | TypedDecl(s,t,Some v) -> 
         if t = "" then sprintf "%s%s = %s;\n" pre s ((v.AsJava "").TrimEnd[|','; '\n'; ';'|])
-        else sprintf "%s%s %s = %s;\n" pre (toJavaType t) s ((v.AsJava "").TrimEnd[|','; '\n'; ';'|])
+        else 
+          let x = ((v.AsJava "").TrimEnd[|','; '\n'; ';'|])
+          let res = sprintf "%s%s %s = %s;\n" pre (toJavaType t) s x
+          res
       | Var s -> s
       | ConstBool b -> b.ToString().ToLower()
       | ConstInt i -> i.ToString()
@@ -341,6 +344,7 @@ type Code =
         if t = "" then sprintf "%s%s;\n" pre s
         else sprintf "%s%s %s;\n" pre t s
       | TypedDecl(s,t,Some v) -> 
+        
         if t = "" then sprintf "%s%s = %s;\n" pre s ((v.AsCSharp "").TrimEnd[|','; '\n'; ';'|])
         else sprintf "%s%s %s = %s;\n" pre t s ((v.AsCSharp "").TrimEnd[|','; '\n'; ';'|])
       | Var s -> s
