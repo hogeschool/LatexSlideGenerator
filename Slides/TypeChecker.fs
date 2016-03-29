@@ -322,8 +322,8 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
                 yield f,ArrowType(args,ret)
             | _ -> ()
         ]
-      let filtered_base_methods = allBaseMethods 
-        //[for (m, code) in allBaseMethods do if class_methods |> List.exists(fun (m1, code1) -> m = m1) |> not then yield (m, code)]
+      let filtered_base_methods = //allBaseMethods 
+        [for (m, code) in allBaseMethods do if class_methods |> List.exists(fun (m1, code1) -> m = m1) |> not then yield (m, code)]
 
       let msValsByName = fields @ class_methods @ filtered_base_methods |> Map.ofList
       do! changeState (fun s -> { s with Classes = (s.Classes |> Map.add n ((*Hidden*)(Object(msValsByName)))) })
