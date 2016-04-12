@@ -467,7 +467,5 @@ breaklines=true}
 
 \begin{document}
 \maketitle
-\begin{landscape}
 " + (elements |> List.map (fun x -> x.ToDocumentString()) |> List.fold (+) "") + @"
-\end{landscape}
 \end{document}"
