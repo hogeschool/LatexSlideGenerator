@@ -29,6 +29,7 @@ type LatexElement =
   | Block of LatexElement
   | BlockWithTitle of string * LatexElement
   | Items of List<LatexElement>
+  | UML of UML
   | PythonCodeBlock of TextSize * Code
   | LambdaCodeBlock of TextSize * Term * showTypes:bool
   | FSharpCodeBlock of TextSize * Term * showTypes:bool
@@ -261,6 +262,13 @@ type LatexElement =
         let k = items |> List.map snd |> List.fold (@) []
         let items = items |> List.map fst
         sprintf @"%s%s%s%s%s" beginFrame beginItemize (items |> Seq.fold (+) "") endItemize endFrame
+
+      | UML items ->
+        let items : UMLItem list = items
+        let items = items |> List.map (fun item -> item.ToStringAsElement())
+        let allItems = items |> List.map (fun i -> i + " \n") |> List.fold (+) ""
+        sprintf @"%s%s%s%s%s" beginFrame beginTikzpicture (items |> Seq.fold (+) "") endTikzpicture endFrame
+
       | PythonCodeBlock (ts,c) ->
           let textSize = ts.ToString()
           sprintf @"%s\lstset{basicstyle=\ttfamily%s}%s%s%s%s" beginFrame textSize (beginCode "Python") (c.AsPython "") endCode endFrame
@@ -386,6 +394,8 @@ let rec generatePresentation author title (slides:List<LatexElement>) =
 \usepackage[space]{grffile}
 \usepackage{soul,xcolor}
 \usepackage{listings}
+\usepackage[simplified]{pgf -umlcd}
+\usepackage{graphicx}
 \usepackage{tabularx}
 \lstset{language=C,
 basicstyle=\ttfamily\footnotesize,

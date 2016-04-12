@@ -2,6 +2,8 @@
 
 let beginFrame = @"\begin{frame}[fragile]{\CurrentSection}" + "\n"
 let endFrame = "\n" + @"\end{frame}" + "\n\n"
+let beginTikzpicture = @"\resizebox{\textwidth}{!}{\n\begin{tikzpicture}"
+let endTikzpicture = @"\end{tikzpicture}\n}\n"
 let beginBlock = @"\begin{block}{\CurrentSubSection}" + "\n"
 let endBlock = "\n" + @"\end{block}" + "\n\n"
 let beginBlockWithTitle t = @"\begin{block}{" + t + "}" + "\n"
