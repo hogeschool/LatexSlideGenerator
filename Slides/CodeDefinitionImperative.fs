@@ -57,7 +57,7 @@ and UMLItem =
       let args = if args.Length > 1 then args.Tail |> List.fold(fun s e -> s + ", " + e) args.Head
                  else ""
       let ret_type = match ret_type with  | None -> "" | Some ret -> " : " + ret
-      "operation{" + name + "(" + args + ") " + ret_type + "}"
+      "\operation{" + name + "(" + args + ") " + ret_type + "}"
     | Class (name, pos_x, pos_y, implements, attributes, operations) -> // name * pos_x * pos_y * implements * attributes * operations
       let items = operations |> List.fold(fun s e -> s + " \n " + e.ToStringAsElement()) ""
       let implements = match implements with | None -> "" | Some entity -> "\implement{" + entity + "}"
