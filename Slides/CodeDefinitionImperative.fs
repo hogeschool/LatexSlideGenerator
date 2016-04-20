@@ -42,6 +42,7 @@ and UMLItem =
   | Class of string * float * float * Option<string> * UMLItem list * UMLItem list // name * pos_x * pos_y * implements * attributes * operations
   | Attribute of string * string // Position * Point 
   | Arrow of string * string * string // from * message * to
+  | Aggregation of string * string * int * string // from * message * to
   member this.ToStringAsElement() =
     match this with
     | Package(name, items) -> 
@@ -52,12 +53,14 @@ and UMLItem =
       (@"\begin{interface}[text width=" + (string) text_size + "cm]{" + name + "}{"+string pos_x+","+string pos_y+"}") + items + ("\n\end{interface}")
     | Attribute(name, _type) -> "\attribute{" + name + " : " + _type + "}"
     | Arrow(from, name, _to) ->
-      "\draw[umlcd style dashed line ,->] (" + from + ")  --node[above , sloped , black]{" + name + "} (" + _to + ");"
+      @"\draw[umlcd style dashed line ,->] (" + from + ")  --node[above , sloped , black]{" + name + "} (" + _to + ");"
+    | Aggregation(from, name, amount, _to) ->
+      @"\aggregation{" + from + "}{" + name + "}{" + string amount + "}{" + _to + "}"
     | Operation(name, args, ret_type) ->
       let args = if args.Length > 1 then args.Tail |> List.fold(fun s e -> s + ", " + e) args.Head
                  else ""
       let ret_type = match ret_type with  | None -> "" | Some ret -> " : " + ret
-      "\operation{" + name + "(" + args + ") " + ret_type + "}"
+      @"\operation{" + name + "(" + args + ") " + ret_type + "}"
     | Class (name, pos_x, pos_y, implements, attributes, operations) -> // name * pos_x * pos_y * implements * attributes * operations
       let items = operations |> List.fold(fun s e -> s + " \n " + e.ToStringAsElement()) ""
       let implements = match implements with | None -> "" | Some entity -> "\implement{" + entity + "}"
