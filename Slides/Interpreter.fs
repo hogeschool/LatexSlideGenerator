@@ -442,7 +442,7 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
           return failwithf "Lookup on %s returned no array" x
       | t ->
         return failwithf "Lookup on %s returned no array" x
-    | GenericLambdaFuncDecl(i_t:string, o_t:string, v_name:string, arg_name:string, body) ->
+    | GenericLambdaFuncDeclAndInit(i_t:string, o_t:string, v_name:string, arg_name:string, body) ->
       return! interpret (Assign(v_name, ConstLambda(-1, [arg_name], body)))
     | ConstLambda _ as cl ->
       return cl

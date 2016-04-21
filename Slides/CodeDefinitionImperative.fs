@@ -86,7 +86,9 @@ type Code =
   | InterfaceDef of string * List<Code>
   | ClassDef of string * List<Code>
   | GenericClassDef of List<string> * string * List<Code>
-  | GenericLambdaFuncDecl of i_t:string * o_t:string * v_name:string * arg_name:string * body:Code
+  //OLD VERSION// | GenericLambdaFuncDecl of i_t:string * o_t:string * v_name:string * arg_name:string * body:Code
+  | GenericLambdaFuncDeclAndInit of i_t:string * o_t:string * v_name:string * arg_name:string * body:Code
+  | GenericLambdaFuncDecl of args:List<string> * body:Code
   | GenericLambdaFuncCall of v_name:string * args:List<Code>
   | Return of Code
   | TypedDecl of string * string * Option<Code>
@@ -448,8 +450,15 @@ type Code =
         let vs_s = 
           [ for v in vs do yield (v.Value.AsCSharp "").Replace("\n","").Replace(";","")] |> List.reduce (fun a b -> a + " ;" + b)
         sprintf "%s[%s]" pre vs_s
-      | GenericLambdaFuncDecl(i_t:string, o_t:string, v_name:string, arg_name:string, Return(res)) ->
+      | GenericLambdaFuncDeclAndInit(i_t:string, o_t:string, v_name:string, arg_name:string, Return(res)) ->
         sprintf "%sFunc<%s,%s> %s = %s => %s;\n" pre i_t o_t v_name arg_name (res.AsCSharp "")
+      | GenericLambdaFuncDecl(args:string list, Return(res)) ->
+        
+        let args = 
+          if args.Length = 0 then "()"
+          elif args.Length = 1 then args.Head
+          else args.Tail |> List.fold(fun s e -> s + ", " + e) args.Head
+        sprintf "%s%s => %s;\n" pre args (res.AsCSharp "")
       | s -> failwithf "Unsupported C# statement %A" s
     member this.NumberOfCSharpLines = 
       let code = ((this.AsCSharp ""):string).TrimEnd([|'\n'|])
@@ -478,7 +487,8 @@ let constInt x = ConstInt(x)
 let constFloat x = ConstFloat(x)
 let constString x = ConstString(x)
 let dots = Dots
-let genericLambdaFuncDecl i_t o_t v_name arg body = GenericLambdaFuncDecl(i_t,o_t,v_name,arg,body)
+let genericLambdaFuncDeclInit i_t o_t v_name arg body = GenericLambdaFuncDeclAndInit(i_t,o_t,v_name,arg,body)
+let genericLambdaFuncDecl args body = GenericLambdaFuncDecl(args,body)
 let genericLambdaFuncCall f arg = GenericLambdaFuncCall(f,arg)
 let genericTypedDecl args x t = GenericTypedDecl(args,x,t,Option.None)
 let genericTypedDeclAndInit args x t c = GenericTypedDecl(args,x,t,Some c)
