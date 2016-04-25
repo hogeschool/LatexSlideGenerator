@@ -335,7 +335,7 @@ type Code =
       | MainCall -> ""
       | End -> ""
       | None -> "null"
-      | Dots -> "...\n"
+      | Dots -> sprintf "%s...\n" pre
       | Implementation i | Inheritance i -> ""
       | GenericInterfaceDef(args,s,ms) ->
         let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
@@ -348,7 +348,7 @@ type Code =
         let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
         ClassDef(s + args_suffix,ms).AsCSharp pre
       | ClassDef(s,ms) -> 
-        let mss = ms |> List.map (fun m -> m.AsJava (pre + "  "))
+        let mss = ms |> List.map (fun m -> m.AsCSharp (pre + "  "))
         let is = ms |> List.filter (function Implementation _ -> true | _ -> false)
         let es = ms |> List.filter (function Inheritance _ -> true | _ -> false)
         let classHeader = sprintf "class %s" s
