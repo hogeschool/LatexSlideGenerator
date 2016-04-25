@@ -54,8 +54,8 @@ and UMLItem =
     | Attribute(name, _type) -> "\attribute{" + name + " : " + _type + "}"
     | Arrow(from, name, _to) ->
       @"\draw[umlcd style dashed line ,->] (" + from + ")  --node[above , sloped , black]{" + name + "} (" + _to + ");"
-    | Aggregation(from, name, amount, _to) ->
-      @"\aggregation{" + from + "}{" + name + "}{" + string amount + "}{" + _to + "}"
+    | Aggregation(from, name, number, _to) ->
+      @"\aggregation{" + from + "}{" + name + "}{" + string number + "}{" + _to + "}"
     | Operation(name, args, ret_type) ->
       let args = if args.Length > 1 then args.Tail |> List.fold(fun s e -> s + ", " + e) args.Head
                  else ""
