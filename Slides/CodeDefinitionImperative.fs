@@ -3,7 +3,7 @@
 open Coroutine
 open CommonLatex
 
-type Operator = Plus | Minus | Times | DividedBy | GreaterThan | Equals
+type Operator = Plus | Minus | Times | DividedBy | GreaterThan | Equals | NotEquals | LessOrEquals | LessThan
   with
     member this.AsPython =
       match this with
@@ -12,7 +12,10 @@ type Operator = Plus | Minus | Times | DividedBy | GreaterThan | Equals
       | Times -> "*"
       | DividedBy -> "//"
       | GreaterThan -> ">"
+      | LessThan -> "<"
+      | LessOrEquals -> "<="
       | Equals -> "=="
+      | NotEquals -> "!="
     member this.AsCSharp =
       match this with
       | DividedBy -> "/"
@@ -42,7 +45,7 @@ and UMLItem =
   | Class of string * float * float * Option<string> * UMLItem list * UMLItem list // name * pos_x * pos_y * implements * attributes * operations
   | Attribute of string * string // Position * Point 
   | Arrow of string * string * string // from * message * to
-  | Aggregation of string * string * int * string // from * message * to
+  | Aggregation of string * string * Option<int> * string // from * message * to
   member this.ToStringAsElement() =
     match this with
     | Package(name, items) -> 
@@ -54,7 +57,9 @@ and UMLItem =
     | Attribute(name, _type) -> "\attribute{" + name + " : " + _type + "}"
     | Arrow(from, name, _to) ->
       @"\draw[umlcd style dashed line ,->] (" + from + ")  --node[above , sloped , black]{" + name + "} (" + _to + ");"
-    | Aggregation(from, name, number, _to) ->
+    | Aggregation(from, name, None, _to) ->
+      @"\aggregation{" + from + "}{" + name + "}{ }{" + _to + "}"
+    | Aggregation(from, name, Some number, _to) ->
       @"\aggregation{" + from + "}{" + name + "}{" + string number + "}{" + _to + "}"
     | Operation(name, args, ret_type) ->
       let args = if args.Length > 1 then args.Tail |> List.fold(fun s e -> s + ", " + e) args.Head
@@ -108,6 +113,7 @@ type Code =
   | GenericClassType of string * List<string>
   | ArrowType of List<Code> * Code
   | Assign of string * Code
+  | AssignInline of string * Code
   | TypedDef of string * List<string * string> * string * Code
   | TypedSig of string * List<string * string> * string
   | Def of string * List<string> * Code
@@ -118,6 +124,7 @@ type Code =
   | If of Code * Code * Code
   | IfThen of Code * Code
   | While of Code * Code
+  | For of Code * Code * Code * Code
   | Op of Code * Operator * Code
   | Sequence of Code * Code
   | InlineSequence of Code * Code
@@ -252,6 +259,7 @@ type Code =
       | ConstString s -> sprintf "\"%s\"" s
       | Ref s -> sprintf "ref %s" s
       | Assign (v,c) -> sprintf "%s%s = %s;\n" pre v ((c.AsJava "").TrimEnd[|','; '\n'; ';'|])
+      | AssignInline (v,c) -> sprintf "%s%s = %s" pre v ((c.AsJava "").TrimEnd[|','; '\n'; ';'|])
       | ConstLambda (pc,args,body) ->
         let argss = args |> List.map (fun a -> a + ",")
         sprintf "%s(%s) => %s" pre ((!+argss).TrimEnd[|','|]) (body.AsJava (pre + "  "))
@@ -300,6 +308,7 @@ type Code =
         sprintf "%s%s[] %s;\n" pre (toJavaType t) x
       | ArrayDecl(x,t,Some c) ->
         sprintf "%s%s[] %s = %s;\n" pre (toJavaType t) x (c.AsJava "")
+      | For(init,condition,step,b) -> this.AsCSharp(pre)
       | NewArray(t,n) ->
         sprintf "%snew %s[%d]" pre (toJavaType t) n
       | GenericLambdaFuncCall(_) | GenericLambdaFuncDecl(_) -> 
@@ -387,7 +396,11 @@ type Code =
       | ConstFloat f -> f.ToString()
       | ConstString s -> sprintf "\"%s\"" s
       | Ref s -> sprintf "ref %s" s
-      | Assign (v,c) -> sprintf "%s%s = %s;\n" pre v ((c.AsCSharp "").TrimEnd[|','; '\n'; ';'|])
+      | AssignInline (v,c) -> sprintf "%s%s = %s" pre v ((c.AsCSharp "").TrimEnd[|','; '\n'; ';'|])
+      | Assign (v,c) -> 
+        let res =
+          sprintf "%s%s = %s;\n" pre v ((c.AsCSharp "").TrimEnd[|','; '\n'; ';'|])
+        res
       | ConstLambda (pc,args,body) ->
         let argss = args |> List.map (fun a -> a + ",")
         sprintf "%s(%s) => %s" pre ((!+argss).TrimEnd[|','|]) (body.AsCSharp (pre + "  "))
@@ -420,9 +433,12 @@ type Code =
         else
           sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
-        sprintf "%sif %s {\n%s } else {\n%s }\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) (e.AsCSharp (pre + "  "))
+        sprintf "%sif %s {\n%s%s}\n%selse{\n%s%s}\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) pre pre (e.AsCSharp (pre + "  ")) pre
       | While(c,b) ->
         sprintf "%swhile %s {\n%s }\n" pre (c.AsCSharp "") (b.AsCSharp (pre + "  "))
+      | For(init,condition,step,b) ->
+        sprintf "%sfor(%s;%s;%s){\n%s }\n" pre (init.AsCSharp "") (condition.AsCSharp "") (step.AsCSharp "") (b.AsCSharp (pre + "  "))
+      
       | Op(a,op,b) ->
         sprintf "(%s %s %s)" ((a.AsCSharp "").Replace("\n","").Replace(";","").Replace("  ","")) (op.AsCSharp) ((b.AsCSharp (pre + "")).Replace("\n","").Replace(";","").Replace("  ",""))
       | Sequence (p,q) ->
