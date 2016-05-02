@@ -120,6 +120,7 @@ type Code =
   | Call of string * List<Code>
   | MainCall
   | MethodCall of string * string * List<Code>
+  | MethodCallInline of string * string * List<Code>
   | StaticMethodCall of string * string * List<Code>
   | If of Code * Code * Code
   | IfThen of Code * Code
@@ -279,6 +280,8 @@ type Code =
       | Call(n,args) ->
         let argss = args |> List.map (fun a -> ((a.AsJava "").TrimEnd[|','; '\n'; ';'|]) + ",")
         sprintf "%s%s(%s);\n" pre n ((!+argss).TrimEnd[|','; '\n'; ';'|])
+      | MethodCallInline(n,m,args) ->
+        this.AsCSharp(pre)
       | MethodCall(n,m,args) ->
         let argss = args |> List.map (fun a -> ((a.AsJava "").TrimEnd[|','; '\n'; ';'|]) + ",")
         sprintf "%s%s.%s(%s);\n" pre n m ((!+argss).TrimEnd[|','; '\n'; ';'|])
@@ -426,6 +429,9 @@ type Code =
       | MethodCall(n,m,args) ->
         let argss = args |> List.map (fun a -> ((a.AsCSharp "").TrimEnd[|','; '\n'; ';'|]) + ",")
         sprintf "%s%s.%s(%s);\n" pre n m ((!+argss).TrimEnd[|','; '\n'; ';'|])
+      | MethodCallInline(n,m,args) ->
+        let argss = args |> List.map (fun a -> ((a.AsCSharp "").TrimEnd[|','; '\n'; ';'|]) + ",")
+        sprintf "%s%s.%s(%s)" pre n m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | StaticMethodCall(c,m,args) ->
         let argss = args |> List.map (fun a -> (a.AsCSharp "").TrimEnd([|'\n'|]) + ",")
         if argss.Length = 1 then
