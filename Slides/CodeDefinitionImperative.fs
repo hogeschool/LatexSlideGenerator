@@ -54,7 +54,7 @@ and UMLItem =
     | Interface(name, text_size, pos_x, pos_y, operations) -> // name * name width * pos_x * pos_y * operations
       let items = operations |> List.fold(fun s e -> s + "\n" + e.ToStringAsElement()) ""
       (@"\begin{interface}[text width=" + (string) text_size + "cm]{" + name + "}{"+string pos_x+","+string pos_y+"}") + items + ("\n\end{interface}")
-    | Attribute(name, _type) -> "\attribute{" + name + " : " + _type + "}"
+    | Attribute(name, _type) -> @"\attribute{" + name + " : " + _type + "}"
     | Arrow(from, name, _to) ->
       @"\draw[umlcd style dashed line ,->] (" + from + ")  --node[above , sloped , black]{" + name + "} (" + _to + ");"
     | Aggregation(from, name, None, _to) ->
@@ -296,6 +296,8 @@ type Code =
         sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
         sprintf "%sif %s {\n%s } else {\n%s }\n" pre (c.AsJava "") (t.AsJava (pre + "  ")) (e.AsJava (pre + "  "))
+      | IfThen(c,t) ->
+        this.AsCSharp pre
       | While(c,b) ->
         sprintf "%swhile %s {\n%s }\n" pre (c.AsJava "") (b.AsJava (pre + "  "))
       | Op(a,op,b) ->
@@ -440,6 +442,8 @@ type Code =
           sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
         sprintf "%sif %s {\n%s%s}\n%selse{\n%s%s}\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) pre pre (e.AsCSharp (pre + "  ")) pre
+      | IfThen(c,t) ->
+        sprintf "%sif %s {\n%s%s}\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) pre 
       | While(c,b) ->
         sprintf "%swhile %s {\n%s }\n" pre (c.AsCSharp "") (b.AsCSharp (pre + "  "))
       | For(init,condition,step,b) ->
