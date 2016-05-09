@@ -3,7 +3,7 @@
 open Coroutine
 open CommonLatex
 
-type Operator = Plus | Minus | Times | DividedBy | GreaterThan | Equals | NotEquals | LessOrEquals | LessThan
+type Operator = Plus | Minus | Times | DividedBy | GreaterThan | GreaterOrEquals | Equals | NotEquals | LessOrEquals | LessThan
   with
     member this.AsPython =
       match this with
@@ -14,6 +14,7 @@ type Operator = Plus | Minus | Times | DividedBy | GreaterThan | Equals | NotEqu
       | GreaterThan -> ">"
       | LessThan -> "<"
       | LessOrEquals -> "<="
+      | GreaterOrEquals -> ">="
       | Equals -> "=="
       | NotEquals -> "!="
     member this.AsCSharp =
@@ -295,9 +296,9 @@ type Code =
         let argss = args |> List.map (fun a -> (a.AsJava "").TrimEnd([|'\n'|]) + ",")
         sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
-        sprintf "%sif %s {\n%s } else {\n%s }\n" pre (c.AsJava "") (t.AsJava (pre + "  ")) (e.AsJava (pre + "  "))
+        sprintf "%sif %s {\n%s%s}\n%selse{\n%s%s}\n" pre (c.AsJava "") (t.AsJava (pre + "  ")) pre pre (e.AsJava (pre + "  ")) pre
       | IfThen(c,t) ->
-        this.AsCSharp pre
+        sprintf "%sif %s {\n%s%s}\n" pre (c.AsJava "") (t.AsJava (pre + "  ")) pre 
       | While(c,b) ->
         sprintf "%swhile %s {\n%s }\n" pre (c.AsJava "") (b.AsJava (pre + "  "))
       | Op(a,op,b) ->
