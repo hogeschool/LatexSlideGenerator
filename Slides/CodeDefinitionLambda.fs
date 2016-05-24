@@ -154,6 +154,7 @@ type Term =
   | Plus
   | Minus
   | Mult
+  | Pow
   | IsZero
   | If
   | Fix
@@ -275,6 +276,7 @@ type Term =
       | Application(Application(Plus,t),u) -> sprintf @"(%s $+$ %s)" (t.ToLambda printTypes) (u.ToLambda printTypes)
       | Application(Application(Minus,t),u) -> sprintf @"(%s $-$ %s)" (t.ToLambda printTypes) (u.ToLambda printTypes)
       | Application(Application(Mult,t),u) -> sprintf @"(%s $\times$ %s)" (t.ToLambda printTypes) (u.ToLambda printTypes)
+      | Application(Application(Pow,m),n) -> sprintf @"($%s^{%s}$)" (m.ToLambda printTypes) (n.ToLambda printTypes)
       | Application(IsZero,t) -> sprintf @"(%s $=$ 0)" (t.ToLambda printTypes)
       | Application(Application(Application(If,c),t),e) -> sprintf "if %s then %s else %s" (c.ToLambda printTypes) (t.ToLambda printTypes) (e.ToLambda printTypes)
       | Application(Application(MakePair,t),u) -> sprintf @"(%s, %s)" (t.ToLambda printTypes) (u.ToLambda printTypes)
@@ -290,6 +292,7 @@ type Term =
       | Minus -> sprintf "-"
       | IsZero -> sprintf "0?"
       | Mult -> sprintf @"$\times$"
+      | Pow -> sprintf @"$\wedge$"
       | If -> sprintf "if-then-else"
       | Fix -> sprintf "fix"
       | MakePair -> sprintf "(,)"
@@ -321,6 +324,7 @@ type Term =
       | Application(Application(Plus,t),u) -> sprintf "(%s + %s)" (t.ToString printTypes) (u.ToString printTypes)
       | Application(Application(Minus,t),u) -> sprintf @"(%s $-$ %s)" (t.ToString printTypes) (u.ToString printTypes)
       | Application(Application(Mult,t),u) -> sprintf "(%s * %s)" (t.ToString printTypes) (u.ToString printTypes)
+      | Application(Application(Pow,m),n) -> sprintf @"($%s^{%s}$)" (m.ToString printTypes) (n.ToString printTypes)
       | Application(IsZero,t) -> sprintf @"(%s $=$ 0)" (t.ToString printTypes)
       | Application(Application(Application(If,c),t),e) -> sprintf "if %s then %s else %s" (c.ToString printTypes) (t.ToString printTypes) (e.ToString printTypes)
       | Application(Application(MakePair,t),u) -> sprintf @"(%s, %s)" (t.ToString printTypes) (u.ToString printTypes)
@@ -335,6 +339,7 @@ type Term =
       | Plus -> sprintf "+"
       | Minus -> sprintf "-"
       | Mult -> sprintf "*"
+      | Pow -> sprintf @"\wedge"
       | IsZero -> sprintf "0?"
       | If -> sprintf "if"
       | Fix -> sprintf "fix"
@@ -376,6 +381,7 @@ type Term =
       | Application(Application(Plus,t),u) -> sprintf "%s(%s + %s)" pre (t.ToFSharp printTypes "") (u.ToFSharp printTypes "")
       | Application(Application(Minus,t),u) -> sprintf @"%s(%s - %s)" pre (t.ToFSharp printTypes "") (u.ToFSharp printTypes "")
       | Application(Application(Mult,t),u) -> sprintf "%s(%s * %s)" pre (t.ToFSharp printTypes "") (u.ToFSharp printTypes "")
+      | Application(Application(Pow,m),n) -> sprintf @"(%s$**${%s})" (m.ToFSharp printTypes "") (n.ToFSharp printTypes "")
       | Application(IsZero,t) -> sprintf @"%s(%s = 0)" pre (t.ToFSharp printTypes "")
       | Application(Application(Application(If,c),t),e) -> sprintf "%sif %s then\n%s\n%selse\n%s\n" pre (c.ToFSharp printTypes "") (t.ToFSharp printTypes (pre + "  ")) pre (e.ToFSharp printTypes (pre + "  "))
       | Application(Application(Var"::",t),u) -> sprintf @"%s%s :: %s" pre (t.ToFSharp printTypes "") (u.ToFSharp printTypes "")
@@ -411,6 +417,7 @@ type Term =
       | Plus -> sprintf "(+)"
       | Minus -> sprintf "(-)"
       | Mult -> sprintf "(*)"
+      | Pow -> sprintf @"(\wedge)"
       | IsZero -> sprintf "((=) 0)"
       | If -> sprintf "if"
       | Fix -> sprintf "letrec"
@@ -472,6 +479,7 @@ type Term =
       | Application(Application(Plus,t),u) -> sprintf "%s(%s + %s)" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
       | Application(Application(Minus,t),u) -> sprintf @"%s(%s - %s)" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
       | Application(Application(Mult,t),u) -> sprintf "%s(%s * %s)" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
+      | Application(Application(Pow,m),n) -> sprintf @"(%s\wedge%s)" (m.ToHaskell printTypes "") (n.ToHaskell printTypes "")
       | Application(IsZero,t) -> sprintf @"%s(%s == 0)" pre (t.ToHaskell printTypes "")
       | Application(Application(Application(If,c),t),e) -> sprintf "%sif %s then\n%s\n%selse\n%s\n" pre (c.ToHaskell printTypes "") (t.ToHaskell printTypes (pre + "  ")) pre (e.ToHaskell printTypes (pre + "  "))
       | Application(Application(Var":",t),u) -> sprintf @"%s%s : %s" pre (t.ToHaskell printTypes "") (u.ToHaskell printTypes "")
@@ -507,6 +515,7 @@ type Term =
       | Plus -> sprintf "(+)"
       | Minus -> sprintf "(-)"
       | Mult -> sprintf "(*)"
+      | Pow -> sprintf @"(\wedge)"
       | IsZero -> sprintf "((=) 0)"
       | If -> sprintf "if"
       | Fix -> sprintf "letrec"
@@ -611,6 +620,8 @@ let invDefaultTerms, defaultTerms =
                 ("a" >=> (("s",((!!!"a")-->(!!!"a"))) ==> (("z",!!!"a") ==> (((!!"m" >>= !!!"a") >> !!"s") >> (((!!"n" >>= !!!"a") >> !!"s") >> !!"z"))))))))
       Mult, ((("m",Nat) ==> (("n",Nat) ==> 
                 ("a" >=> (("s",((!!!"a")-->(!!!"a"))) ==> (("z",!!!"a") ==> (((!!"m" >>= !!!"a") >> ((!!"n" >>= !!!"a") >> !!"s")) >> !!"z")))))))
+      Pow, ((("m",Nat) ==> (("n",Nat) ==> 
+                ("a" >=> (("s",((!!!"a")-->(!!!"a"))) ==> (("z",!!!"a") ==> ((((!!"n" >>= !!!"a") >> (!!"m" >>= !!!"a")) >> (!!"s")) >> !!"z")))))))
       IsZero, ((("m",Nat) ==> (("n",Nat) ==> 
                   (((!!"m" >>= Boolean) >> (("x",Boolean) ==> False)) >> True))))
 
@@ -636,6 +647,7 @@ let invDefaultTerms, defaultTerms =
 
         Plus, (-"m" ==> (-"n" ==> (-"s" ==> (-"z" ==> ((!!"m" >> !!"s") >> ((!!"n" >> !!"s") >> !!"z"))))))
         Mult, (-"m" ==> (-"n" ==> (-"s" ==> (-"z" ==> ((!!"m" >> (!!"n" >> !!"s")) >> !!"z")))))
+        Pow, (-"m" ==> (-"n" ==> (-"s" ==> (-"z" ==> (!!"n" >> (Mult >> !!"n"))))))
         IsZero, (-"m" ==> ((!!"m" >> (-"x" ==> False)) >> True))
 
         Fix, (-"f" ==> ((-"x" ==> (!!"f" >> (!!"x" >> !!"x"))) >> (-"x" ==> (!!"f" >> (!!"x" >> !!"x")))))
