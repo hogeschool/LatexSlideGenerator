@@ -70,10 +70,13 @@ and UMLItem =
     | Class (name, pos_x, pos_y, implements, attributes, operations) -> // name * pos_x * pos_y * implements * attributes * operations
       let items = operations |> List.fold(fun s e -> s + " \n " + e.ToStringAsElement()) ""
       let implements = match implements with | None -> "" | Some entity -> "\implement{" + entity + "}"
+      
       (@"\begin{class}{" + name + "}{" + string pos_x + "," + string pos_y + "}" + implements + " ") + items + ("\n\end{class}")
   
 type Code =
+  | Throw of Code
   | Static of Code
+  | Override of Code
   | Public of Code
   | Private of Code
   | Dots
@@ -91,6 +94,8 @@ type Code =
   | GenericInterfaceDef of List<string> * string * List<Code>
   | InterfaceDef of string * List<Code>
   | ClassDef of string * List<Code>
+  | AbstractClassDef of string * List<Code>
+  
   | GenericClassDef of List<string> * string * List<Code>
   //OLD VERSION// | GenericLambdaFuncDecl of i_t:string * o_t:string * v_name:string * arg_name:string * body:Code
   | GenericLambdaFuncDeclAndInit of i_t:string * o_t:string * v_name:string * arg_name:string * body:Code
@@ -116,16 +121,21 @@ type Code =
   | Assign of string * Code
   | AssignInline of string * Code
   | TypedDef of string * List<string * string> * string * Code
+  | TypedDefWithBase of string * List<string * string> * string * List<string> * Code
+  | TypedDefWithOverride of string * List<string * string> * string * List<string> * Code
   | TypedSig of string * List<string * string> * string
+  | TypedSigAbstract of string * List<string * string> * string
   | Def of string * List<string> * Code
   | Call of string * List<Code>
   | MainCall
   | MethodCall of string * string * List<Code>
   | MethodCallInline of string * string * List<Code>
+  | InstanceOf of Code * string
   | StaticMethodCall of string * string * List<Code>
   | If of Code * Code * Code
   | IfThen of Code * Code
   | While of Code * Code
+  | Foreach of string * string * Code * Code //foreach(type var_name : code) { code }
   | For of Code * Code * Code * Code
   | Op of Code * Operator * Code
   | Sequence of Code * Code
@@ -175,6 +185,8 @@ type Code =
       | IfThen(c,t) ->
         let tS = (t.AsPython (pre + "  "))
         sprintf "%sif %s:\n%s" pre ((c.AsPython "").TrimEnd([|'\n'|])) tS
+      
+      
       | While(c,b) ->
         let bs = (b.AsPython (pre + "  "))
         sprintf "%swhile %s:\n%s" pre (c.AsPython "") bs
@@ -192,10 +204,12 @@ type Code =
 
     member this.AsJava pre =
       match this with
+      | Throw(c) -> sprintf "%sthrow %s" pre (c.AsJava "")
       | Private p ->
         (sprintf "%sprivate%s" pre (p.AsJava pre)).Replace("private" + pre, "private ")
       | Static p ->
         (sprintf "%sstatic%s" pre (p.AsJava pre)).Replace("static" + pre, "static ")
+      | Override p -> p.AsJava pre
       | Public p ->
         (sprintf "%spublic%s" pre (p.AsJava pre)).Replace("public" + pre, "public ")
       | ToString p ->
@@ -212,12 +226,26 @@ type Code =
         let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
         InterfaceDef(s + args_suffix,ms).AsJava pre
       | InterfaceDef(s,ms) ->
-        let mss = ms |> List.map (fun m -> m.AsJava (pre + "  "))
-        let res = sprintf "interface %s {\n%s%s}\n" s (!+mss) pre
-        res        
+        let interfaceHeader = sprintf "interface %s" s
+        let is = ms |> List.filter (function Implementation _ -> true | _ -> false)
+        let interfaceHeader = 
+          match is with
+          | [] ->
+            interfaceHeader
+          | _ -> 
+            let isNames = is |> List.map (function Implementation i -> i | _ -> failwith "Invalid interface") 
+                             |> List.reduce (fun a b -> a + ", " + b)
+            sprintf "%s extends %s" interfaceHeader isNames
+        let mss = ms |> List.map (fun m -> m.AsCSharp (pre + "  "))
+        let res = sprintf "%s {\n%s%s}\n" interfaceHeader (!+mss) pre
+        res
       | GenericClassDef(args,s,ms) ->
         let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
         ClassDef(s + args_suffix,ms).AsJava pre
+      | AbstractClassDef (s,ms)->
+        let res = ClassDef(s, ms).AsJava pre
+
+        "abstract " + res
       | ClassDef(s,ms) -> 
         let mss = ms |> List.map (fun m -> m.AsJava (pre + "  "))
         let is = ms |> List.filter (function Implementation _ -> true | _ -> false)
@@ -265,9 +293,16 @@ type Code =
       | ConstLambda (pc,args,body) ->
         let argss = args |> List.map (fun a -> a + ",")
         sprintf "%s(%s) => %s" pre ((!+argss).TrimEnd[|','|]) (body.AsJava (pre + "  "))
+      | TypedSigAbstract(n,args,t) ->
+        let res = TypedSig(n,args,t).AsJava pre
+        (sprintf "%sabstract%s" pre res).Replace(pre + "private" + pre, " private ")
       | TypedSig (n,args,t) ->
         let argss = args |> List.map (fun (t,a) -> t + " " + a + ",")
         sprintf "%s%s %s(%s);\n" pre t n ((!+argss).TrimEnd[|','; '\n'|])
+      | TypedDefWithBase (n,args,t, super_args,body) ->
+        let argss = args |> List.map (fun (t,a) -> (toJavaType t) + " " + a + ",")
+        (if t = "" then sprintf "%s%s(%s) {\n%s  super(%s);\n%s%s}\n" pre n
+         else sprintf "%s%s %s(%s) {\n%s  super(%s);\n%s%s}\n" pre t n) ((!+argss).TrimEnd[|','; '\n'|]) pre ((!+super_args).TrimEnd[|','; '\n'|]) (body.AsJava (pre + "  ")) pre
       | TypedDef (n,args,t,body) ->
         let argss = args |> List.map (fun (t,a) -> (toJavaType t) + " " + a + ",")
         (if t = "" then sprintf "%s%s(%s) {\n%s%s}\n" pre n
@@ -286,6 +321,8 @@ type Code =
       | MethodCall(n,m,args) ->
         let argss = args |> List.map (fun a -> ((a.AsJava "").TrimEnd[|','; '\n'; ';'|]) + ",")
         sprintf "%s%s.%s(%s);\n" pre n m ((!+argss).TrimEnd[|','; '\n'; ';'|])
+      | InstanceOf(c, t) ->
+        sprintf "%s%s instanceof %s" pre (c.AsJava "") t
       | StaticMethodCall("Int32","Parse",args) ->
         StaticMethodCall("Integer","parseInt",args).AsJava pre
       | StaticMethodCall("Console","WriteLine",args) ->
@@ -296,9 +333,11 @@ type Code =
         let argss = args |> List.map (fun a -> (a.AsJava "").TrimEnd([|'\n'|]) + ",")
         sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
-        sprintf "%sif %s {\n%s%s}\n%selse{\n%s%s}\n" pre (c.AsJava "") (t.AsJava (pre + "  ")) pre pre (e.AsJava (pre + "  ")) pre
+        sprintf "%sif(%s) {\n%s%s}\n%selse{\n%s%s}\n" pre (c.AsJava "") (t.AsJava (pre + "  ")) pre pre (e.AsJava (pre + "  ")) pre
       | IfThen(c,t) ->
-        sprintf "%sif %s {\n%s%s}\n" pre (c.AsJava "") (t.AsJava (pre + "  ")) pre 
+        sprintf "%sif(%s) {\n%s%s}\n" pre (c.AsJava "") (t.AsJava (pre + "  ")) pre 
+      | Foreach(t, v, c, b) -> //foreach(type var_name : code) { code }
+        sprintf "%sfor(%s %s : %s){ \n%s }\n" pre t v (c.AsJava "") (b.AsJava (pre + "  "))
       | While(c,b) ->
         sprintf "%swhile %s {\n%s }\n" pre (c.AsJava "") (b.AsJava (pre + "  "))
       | Op(a,op,b) ->
@@ -337,7 +376,9 @@ type Code =
       | FloatType -> sprintf "%sfloat" pre
       | StringType -> sprintf "%sstring" pre
       | Private p ->
-        (sprintf "%sprivate%s" pre (p.AsCSharp pre)).Replace("private" + pre, "private ")
+        (sprintf "%sprivate%s" pre (p.AsCSharp pre))
+      | Override p -> 
+        (sprintf "%soverride%s" pre (p.AsCSharp pre)).Replace("override" + pre, "override ")
       | Static p ->
         (sprintf "%sstatic%s" pre (p.AsCSharp pre)).Replace("static" + pre, "static ")
       | Public p ->
@@ -349,6 +390,7 @@ type Code =
         sprintf @"%s\begin{tabular}{c} %s \end{tabular}" pre ((!+argss).TrimEnd[|','; ' '; '\\'|])
       | MainCall -> ""
       | End -> ""
+      | Throw(c) -> sprintf "%sthrow %s" pre (c.AsCSharp "")
       | None -> "null"
       | Dots -> sprintf "%s...\n" pre
       | Implementation i | Inheritance i -> ""
@@ -356,12 +398,26 @@ type Code =
         let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
         InterfaceDef(s + args_suffix,ms).AsCSharp pre
       | InterfaceDef(s,ms) ->
+        let interfaceHeader = sprintf "interface %s" s
+        let is = ms |> List.filter (function Implementation _ -> true | _ -> false)
+        let interfaceHeader = 
+          match is with
+          | [] ->
+            interfaceHeader
+          | _ -> 
+            let isNames = is |> List.map (function Implementation i -> i | _ -> failwith "Invalid interface") 
+                             |> List.reduce (fun a b -> a + ", " + b)
+            sprintf "%s : %s" interfaceHeader isNames
         let mss = ms |> List.map (fun m -> m.AsCSharp (pre + "  "))
-        let res = sprintf "interface %s {\n%s%s}\n" s (!+mss) pre
+        let res = sprintf "%s {\n%s%s}\n" interfaceHeader (!+mss) pre
         res
       | GenericClassDef(args,s,ms) ->
         let args_suffix = sprintf "<%s>" (args |> List.reduce (fun a b -> a + ", " + b))
         ClassDef(s + args_suffix,ms).AsCSharp pre
+      | AbstractClassDef (s,ms)->
+        let res = ClassDef(s, ms).AsCSharp pre
+
+        "abstract " + res
       | ClassDef(s,ms) -> 
         let mss = ms |> List.map (fun m -> m.AsCSharp (pre + "  "))
         let is = ms |> List.filter (function Implementation _ -> true | _ -> false)
@@ -410,9 +466,16 @@ type Code =
       | ConstLambda (pc,args,body) ->
         let argss = args |> List.map (fun a -> a + ",")
         sprintf "%s(%s) => %s" pre ((!+argss).TrimEnd[|','|]) (body.AsCSharp (pre + "  "))
+      | TypedSigAbstract(n,args,t) ->
+        let res = TypedSig(n,args,t).AsCSharp pre
+        (sprintf "%sabstract%s" pre res).Replace(pre + "private" + pre, " private ")
       | TypedSig (n,args,t) ->
         let argss = args |> List.map (fun (t,a) -> t + " " + a + ",")
         sprintf "%s%s %s(%s);\n" pre t n ((!+argss).TrimEnd[|','; '\n'|])
+      | TypedDefWithBase (n,args,t, super_args,body) ->
+        let argss = args |> List.map (fun (t,a) -> (toJavaType t) + " " + a + ",")
+        (if t = "" then sprintf "%s%s(%s) : base(%s) {\n%s%s}\n" pre n
+         else sprintf "%s%s %s(%s) : base(%s) {\n%s%s}\n" pre t n) ((!+argss).TrimEnd[|','; '\n'|]) ((!+super_args).TrimEnd[|','; '\n'|]) (body.AsCSharp (pre + "  ")) pre
       | TypedDef (n,args,t,body) ->
         let argss = args |> List.map (fun (t,a) -> t + " " + a + ",")
         (if t = "" then sprintf "%s%s(%s) {\n%s%s}\n" pre n
@@ -429,6 +492,8 @@ type Code =
       | Call(n,args) ->
         let argss = args |> List.map (fun a -> ((a.AsCSharp "").TrimEnd[|','; '\n'; ';'|]) + ",")
         sprintf "%s%s(%s);\n" pre n ((!+argss).TrimEnd[|','; '\n'; ';'|])
+      | InstanceOf(c, t) ->
+        sprintf "%s%s is %s" pre (c.AsCSharp "") t
       | MethodCall(n,m,args) ->
         let argss = args |> List.map (fun a -> ((a.AsCSharp "").TrimEnd[|','; '\n'; ';'|]) + ",")
         sprintf "%s%s.%s(%s);\n" pre n m ((!+argss).TrimEnd[|','; '\n'; ';'|])
@@ -442,9 +507,11 @@ type Code =
         else
           sprintf "%s%s.%s(%s);\n" pre c m ((!+argss).TrimEnd[|','; '\n'; ';'|])
       | If(c,t,e) ->
-        sprintf "%sif %s {\n%s%s}\n%selse{\n%s%s}\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) pre pre (e.AsCSharp (pre + "  ")) pre
+        sprintf "%sif(%s) {\n%s%s}\n%selse{\n%s%s}\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) pre pre (e.AsCSharp (pre + "  ")) pre
       | IfThen(c,t) ->
-        sprintf "%sif %s {\n%s%s}\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) pre 
+        sprintf "%sif(%s) {\n%s%s}\n" pre (c.AsCSharp "") (t.AsCSharp (pre + "  ")) pre 
+      | Foreach(t, v, c, b) -> //foreach(type var_name : code) { code }
+        sprintf "%sforeach(%s %s in %s){ \n%s }\n" pre t v (c.AsCSharp "") (b.AsCSharp (pre + "  "))
       | While(c,b) ->
         sprintf "%swhile %s {\n%s }\n" pre (c.AsCSharp "") (b.AsCSharp (pre + "  "))
       | For(init,condition,step,b) ->
@@ -499,12 +566,14 @@ type Code =
 
 let makeStatic c = Static(c)
 let makePublic c = Public(c)
+let makeOverride c = Override(c)
 let makePrivate c = Private(c)
 let implements i = Implementation(i)
 let extends i = Inheritance(i)
 let interfaceDef c m = InterfaceDef(c,m)
 let genericInterfaceDef args c m = GenericInterfaceDef(args,c,m)
 let classDef c m = ClassDef(c,m)
+let abstractClassDef c m = AbstractClassDef(c,m)
 let genericClassDef args c m = GenericClassDef(args,c,m)
 let (:=) x y = Assign(x,y)
 let newC c a = New(c,a)
@@ -530,6 +599,7 @@ let var x = Var(x)
 let ret x = Return(x)
 let def x l b = Def(x,l,b)
 let typedDef x l t b = TypedDef(x,l,t,b)
+let typedDefWithBase x l t s b = TypedDefWithBase(x,l,t,s,b)
 let typedSig x l t = TypedSig(x,l,t)
 let call x l = Call(x,l)
 let staticMethodCall c m l = StaticMethodCall(c,m,l)

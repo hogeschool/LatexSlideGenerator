@@ -174,6 +174,9 @@ type LatexElement =
           let items = items |> List.map (fun item -> let i = item.ToDocumentString() in i + "\n")
           let allItems = items |> List.map (fun i -> i + " \n") |> List.fold (+) ""
           allItems
+      | Image(image, scale) ->
+          sprintf @"\centering
+\includegraphics[scale=%s]{%s}" (string scale) image
       | _ -> ""
     member this.ToStringAsElement() = 
       match this with

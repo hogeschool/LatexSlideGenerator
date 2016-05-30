@@ -228,6 +228,8 @@ let rec interpret addThisToMethodArgs consName toString numberOfLines (p:Code) :
       let! s = getState
       return None
     | Implementation i | Inheritance i -> return None
+    | GenericInterfaceDef(_,n,ms) ->
+      return! interpret(InterfaceDef(n,ms))
     | InterfaceDef (n,ms) as intf ->
       let! pc = getPC
       let! s = getState

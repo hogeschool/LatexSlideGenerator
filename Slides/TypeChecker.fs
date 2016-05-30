@@ -241,6 +241,11 @@ let rec typeCheck showMethodsTypeChecking pause addThisToMethodArgs consName toS
           return failwithf "Cannot perform %s %s %s" (toString a) op.AsPython (toString b)
       | _ -> 
         return failwithf "Invalid operation %s %s %s" (toString a) op.AsPython (toString b)
+    | GenericInterfaceDef(args,n,m) ->
+      let! res = typeCheck (InterfaceDef(n,m))
+      do! changeState (fun s -> { s with Classes = s.Classes |> Map.remove n; 
+                                         GenericClasses = s.GenericClasses |> Map.add n (args,s.Classes.[n]) })
+      return res
     | InterfaceDef (n,ms) as intf ->
       let! pc = getPC
       let msValsByName = 
