@@ -3,10 +3,11 @@
 open Coroutine
 open CommonLatex
 
-type Operator = Plus | Minus | Times | DividedBy | GreaterThan | GreaterOrEquals | Equals | NotEquals | LessOrEquals | LessThan
+type Operator = Percent | Plus | Minus | Times | DividedBy | GreaterThan | GreaterOrEquals | Equals | NotEquals | LessOrEquals | LessThan
   with
     member this.AsPython =
       match this with
+      | Percent -> "%"
       | Plus -> "+"
       | Minus -> "-"
       | Times -> "*"
@@ -553,6 +554,13 @@ type Code =
           elif args.Length = 1 then args.Head
           else args.Tail |> List.fold(fun s e -> s + ", " + e) args.Head
         sprintf "%s%s => %s;\n" pre args (res.AsCSharp "")
+      | GenericLambdaFuncDecl(args:string list, res) ->
+        
+        let args = 
+          if args.Length = 0 then "()"
+          elif args.Length = 1 then args.Head
+          else args.Tail |> List.fold(fun s e -> s + ", " + e) args.Head
+        sprintf "%s%s => \n%s{ %s }\n" pre args pre (res.AsCSharp pre)
       | s -> failwithf "Unsupported C# statement %A" s
     member this.NumberOfCSharpLines = 
       let code = ((this.AsCSharp ""):string).TrimEnd([|'\n'|])
