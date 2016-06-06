@@ -80,6 +80,7 @@ type Code =
   | Override of Code
   | Public of Code
   | Private of Code
+  | Protected of Code
   | Dots
   | End
   | ToString of Code
@@ -213,6 +214,8 @@ type Code =
       | Override p -> p.AsJava pre
       | Public p ->
         (sprintf "%spublic%s" pre (p.AsJava pre)).Replace("public" + pre, "public ")
+      | Protected p ->
+        (sprintf "%sprotected%s" pre (p.AsJava pre)).Replace("protected" + pre, "protected ")
       | ToString p ->
         (sprintf "%s%s.toString()" pre (p.AsJava ""))
       | Object bs ->
@@ -384,6 +387,8 @@ type Code =
         (sprintf "%sstatic%s" pre (p.AsCSharp pre)).Replace("static" + pre, "static ")
       | Public p ->
         (sprintf "%spublic%s" pre (p.AsCSharp pre)).Replace("public" + pre, "public ")
+      | Protected p ->
+        (sprintf "%sprotected%s" pre (p.AsCSharp pre)).Replace("protected" + pre, "protected ")
       | ToString p ->
         (sprintf "%s%s.ToString()" pre (p.AsCSharp ""))
       | Object bs ->
@@ -576,6 +581,7 @@ let makeStatic c = Static(c)
 let makePublic c = Public(c)
 let makeOverride c = Override(c)
 let makePrivate c = Private(c)
+let makeProtected c = Protected(c)
 let implements i = Implementation(i)
 let extends i = Inheritance(i)
 let interfaceDef c m = InterfaceDef(c,m)
