@@ -220,7 +220,8 @@ type Term =
         sprintf @"(*@\colorbox{orange}{%s}@*)%s" !x ((Highlighted(t,Underlined)).ToLambdaInner printTypes)
       | Highlighted(Lambda(x,t),Colored) ->
         sprintf @"(*@\colorbox{yellow}{%s}@*)%s" !x ((Highlighted(t,Colored)).ToLambdaInner printTypes)
-      | _ -> sprintf @"$\rightarrow$%s" (this.ToLambda printTypes)
+//      | _ -> sprintf @"$\rightarrow$%s" (this.ToLambda printTypes)
+      | _ -> sprintf @"$.$%s" (this.ToLambda printTypes)
     member this.Length = 
       match this with
       | Highlighted(t,_) -> t.Length
@@ -329,7 +330,7 @@ type Term =
       | Application(Application(Application(If,c),t),e) -> sprintf "if %s then %s else %s" (c.ToString printTypes) (t.ToString printTypes) (e.ToString printTypes)
       | Application(Application(MakePair,t),u) -> sprintf @"(%s, %s)" (t.ToString printTypes) (u.ToString printTypes)
       | Application(t,u) -> sprintf "(%s %s)" (t.ToString printTypes) (u.ToString printTypes)
-      | Lambda(x,t) -> sprintf @"(\%s.%s)" (printTypes.PrintVar x) (t.ToString printTypes)
+      | Lambda(x,t) -> sprintf @"(\%s.%s)" (printTypes.PrintVar x) (t.ToString printTypes) // should '\' be '\lambda' ?
       | Let(_bind,_expr,_in) -> sprintf "let %s = %s in %s" (printTypes.PrintVar _bind) (_expr.ToString printTypes) (_in.ToString printTypes)
       | True -> sprintf "TRUE"
       | False -> sprintf "FALSE"

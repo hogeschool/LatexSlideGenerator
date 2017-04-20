@@ -14,8 +14,8 @@ let beginItemize = @"\begin{itemize}" + "\n"
 let endItemize = "\n" + @"\end{itemize}" + "\n"
 let beginCode lang = (sprintf @"\lstset{language=%s}\begin{lstlisting}" lang) + "\n"
 let endCode = "\n" + @"\end{lstlisting}" + "\n"
-let beginMath = @"$$"
-let endMath = @"$$" + "\n"
+let beginMath = @"\["
+let endMath = @"\]" + "\n"
 
 let beginTabular c = 
   match c with

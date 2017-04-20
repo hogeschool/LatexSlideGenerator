@@ -10,7 +10,8 @@
       do System.IO.File.WriteAllText(tex, generate author title source)
       for i = 0 to (if compileTwice then 1 else 0) do
   //      let p = System.Diagnostics.ProcessStartInfo("pdflatex.exe", "-synctex=1 -interaction=nonstopmode " + tex)
-        let p = System.Diagnostics.ProcessStartInfo("pdflatex.exe", "-synctex=1 -interaction=batchmode " + tex)
+  //      let p = System.Diagnostics.ProcessStartInfo("pdflatex.exe", "-synctex=1 -interaction=batchmode " + tex)
+        let p = System.Diagnostics.ProcessStartInfo("pdflatex.exe", "-interaction=batchmode " + tex)
         do p.UseShellExecute <- false
         do (System.Diagnostics.Process.Start p).WaitForExit()
       let final_pdf = System.IO.Path.Combine([|@"..\..\"; pdf|])

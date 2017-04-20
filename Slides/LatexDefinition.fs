@@ -49,7 +49,7 @@ type LatexElement =
   | LambdaStateTrace of textSize:TextSize * term:Term * maxSteps:Option<int> * expandInsideLambda:bool * showArithmetics:bool * showControlFlow:bool * showLet:bool * showPairs:bool * showUnions:bool
   | LambdaTypeTrace of textSize:TextSize * term:Term
   with
-    member this.ToDocumentString() = 
+    member this.ToDocumentString() = // NB: not used for presentations!
       match this with
       | Section t ->
         sprintf @"\section{%s}%s" t "\n"
@@ -59,7 +59,7 @@ type LatexElement =
         sprintf @"\paragraph{%s}%s" t "\n"
       | Pause -> @""
       | Question q -> 
-          sprintf @"\textit{%s}" q
+          sprintf @"\begin{center}{\textit{%s}}\end{center}" q
       | Figure(path,scale) ->
           sprintf "\\begin{figure}\n\\includegraphics[scale=%f]{%s}\n\\end{figure}" scale path
       | InlineCode c -> sprintf @"\texttt{%s}" c
@@ -182,7 +182,7 @@ type LatexElement =
       match this with
       | Pause -> @"\pause", []
       | Question q -> 
-          sprintf @"%s\textit{%s}%s" beginExampleBlock q endExampleBlock, []
+          sprintf @"%s\centering\textit{%s}%s" beginExampleBlock q endExampleBlock, []
       | Figure(path,scale) ->
           sprintf "\\begin{figure}\n\\includegraphics[scale=%f]{%s}\n\\end{figure}" scale path, []
       | InlineCode c -> sprintf @"\texttt{%s}" c, []
@@ -198,7 +198,7 @@ type LatexElement =
       | Large -> sprintf "\\large\n", []
       | BlockWithTitle(title,t) ->
         let ts,k = t.ToStringAsElement()
-        sprintf @"%s%s%s" (beginBlockWithTitle title) ts endExampleBlock, k
+        sprintf @"%s%s%s" (beginBlockWithTitle title) ts endBlockWithTitle, k
       | Block t ->
         let ts,k = t.ToStringAsElement()
         sprintf @"%s%s%s" beginExampleBlock ts endExampleBlock, k
@@ -250,6 +250,11 @@ type LatexElement =
       | Block t ->
         let content,rest = t.ToStringAsElement()
         sprintf @"%s%s%s%s%s" beginFrame beginBlock content endBlock endFrame
+
+      | BlockWithTitle (title,t) ->
+        let content,rest = t.ToStringAsElement()
+        sprintf @"%s%s%s%s%s" beginFrame (beginBlockWithTitle title) content endBlockWithTitle endFrame
+
       | Pause -> @"\pause"
       | Question q ->
         sprintf @"%s%s\textit{%s}%s%s" beginFrame beginExampleBlock q endExampleBlock endFrame
@@ -376,9 +381,9 @@ and TypingRule =
   with 
     override this.ToString() =
       let ps = 
-        match this.Premises |> List.map ((+) "\ ") with
+        match this.Premises (*|> List.map ((+) "\ ") *)with
         | [] -> ""
-        | ps -> ps |> List.reduce (fun a b -> a + "\wedge" + b)
+        | ps -> ps |> List.reduce (fun a b -> a + " \quad " + b)
       sprintf @"%s\frac{%s}{%s}%s" beginMath ps this.Conclusion endMath
 
 let (!) = Text
@@ -409,6 +414,9 @@ breaklines=true}
   literate={ï}{{\""i}}1
            {ì}{{\`i}}1
 }
+
+% this looks better than F\# or F$^\#$
+\newcommand{\Fsharp}{F$^\sharp$}
 
 \title{" + title + @"}
 
